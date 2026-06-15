@@ -295,10 +295,8 @@ local function build(host)
   f.browseHeader = S.makeSectionHeader(f)
   f.subHeaders = {}
   f.rows = {}
-  f.note = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")   -- featured-area message
-  f.note:SetTextColor(0.6, 0.6, 0.62); f.note:SetJustifyH("LEFT")
-  f.note2 = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")  -- era-body message
-  f.note2:SetTextColor(0.6, 0.6, 0.62); f.note2:SetJustifyH("LEFT")
+  f.note  = S.makeSubText(f)   -- featured-area message (shared subheader font)
+  f.note2 = S.makeSubText(f)   -- era-body message
   f.prev = makeNavButton(f, "<")
   f.next = makeNavButton(f, ">")
   f.eraLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -321,12 +319,50 @@ local function ensureRow(f, i)
   return f.rows[i]
 end
 
+-- A single full-page message under the "Memories together" header (pairing prompt
+-- or a loading note). Hides every other widget so the page reads as one clean state.
+local function fullPageNote(f, colW, text, topPad)
+  f.featHeader.label:ClearAllPoints(); f.featHeader.label:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+  S.styleHeader(f.featHeader, "Memories together", colW)
+  local yOff = S.HEADER_H
+  f.note:Show(); f.note:ClearAllPoints(); f.note:SetPoint("TOPLEFT", f, "TOPLEFT", 3, -(yOff + topPad))
+  f.note:SetWidth(colW - 6); f.note:SetText(text)
+  f.note2:Hide()
+  f.prev:Hide(); f.next:Hide(); f.eraLabel:Hide()
+  for i = 1, #f.cards do f.cards[i]:Hide() end
+  for i = 1, #f.subHeaders do S.hideHeader(f.subHeaders[i]) end
+  for i = 1, #f.rows do f.rows[i]:SetShown(false) end
+  local h = yOff + topPad + f.note:GetStringHeight() + 14
+  f:SetHeight(h); return h
+end
+
 -- ---------------------------------------------------------------------------
 -- Refresh
 -- ---------------------------------------------------------------------------
 local function refresh(f, ctx)
   local W = ctx.width; f:SetWidth(W)
   local colW = math.min(W, 600)
+
+  -- The "Browse by era" section header was removed by design; the era nav is
+  -- centered beneath the list instead. f.browseHeader stays hidden.
+  S.hideHeader(f.browseHeader)
+
+  -- Not linked: a single prompt — nothing to browse or feature yet.
+  if not partnerLinked() then
+    return fullPageNote(f, colW,
+      "|cff808080Pair with your partner to start collecting the achievements you've earned together.|r", 10)
+  end
+
+  -- Our own achievements are scanned across frames (the full DB is large), so the
+  -- page opens instantly. Show a note while the first scan runs, then repaint — this
+  -- is what keeps clicking "Together" from freezing the client. Skipped in demo mode,
+  -- which serves canned data.
+  if not ns.db.demoMode and not ns.AchvSync.Ready() then
+    ns.AchvSync.Ensure(function() if ns.Dashboard then ns.Dashboard.Refresh() end end)
+    return fullPageNote(f, colW,
+      "|cffd0d0d0Gathering your achievements…|r\n|cff808080This only takes a moment the first time you open it.|r", 18)
+  end
+
   viewEra = viewEra or defaultEra()
 
   -- Pull what we need: the era on screen, plus the oldest era the partner reports
@@ -344,45 +380,13 @@ local function refresh(f, ctx)
 
   local yOff, ci, hi, ri = 0, 0, 0, 0
 
-  -- The "Browse by era" section header was removed by design; the era nav is
-  -- centered beneath the list instead. f.browseHeader stays hidden.
-  S.hideHeader(f.browseHeader)
-
-  -- Not linked: a single prompt — nothing to browse or feature yet.
-  if not partnerLinked() then
-    f.featHeader.label:ClearAllPoints(); f.featHeader.label:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-    S.styleHeader(f.featHeader, "Memories together", colW)
-    yOff = S.HEADER_H
-    f.note:Show(); f.note:ClearAllPoints(); f.note:SetPoint("TOPLEFT", f, "TOPLEFT", 3, -(yOff + 10))
-    f.note:SetWidth(colW - 6)
-    f.note:SetText("|cff808080Pair with your partner to start collecting the achievements you've earned together.|r")
-    f.note2:Hide()
-    f.prev:Hide(); f.next:Hide(); f.eraLabel:Hide()
-    for i = 1, #f.cards do f.cards[i]:Hide() end
-    for i = 1, #f.subHeaders do S.hideHeader(f.subHeaders[i]) end
-    for i = 1, #f.rows do f.rows[i]:SetShown(false) end
-    local h = yOff + 10 + f.note:GetStringHeight() + 14
-    f:SetHeight(h); return h
-  end
-
   -- Initial load: hold a single full-page message until the first era's data lands,
   -- rather than flashing a half-populated page as chunks stream in. Once any era has
   -- arrived (even an empty one), we fall through to the real layout; later era
   -- navigation uses the inline "Syncing…" note instead of blanking the page.
   if not ns.db.demoMode and not next(ns.state.partner.achv or {}) then
-    f.featHeader.label:ClearAllPoints(); f.featHeader.label:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-    S.styleHeader(f.featHeader, "Memories together", colW)
-    yOff = S.HEADER_H
-    f.note:Show(); f.note:ClearAllPoints(); f.note:SetPoint("TOPLEFT", f, "TOPLEFT", 3, -(yOff + 18))
-    f.note:SetWidth(colW - 6); f.note:SetJustifyH("LEFT")
-    f.note:SetText("|cffd0d0d0Gathering the achievements you've earned together…|r\n|cff808080This can take a few seconds the first time you open it.|r")
-    f.note2:Hide()
-    f.prev:Hide(); f.next:Hide(); f.eraLabel:Hide()
-    for i = 1, #f.cards do f.cards[i]:Hide() end
-    for i = 1, #f.subHeaders do S.hideHeader(f.subHeaders[i]) end
-    for i = 1, #f.rows do f.rows[i]:SetShown(false) end
-    local h = yOff + 18 + f.note:GetStringHeight() + 14
-    f:SetHeight(h); return h
+    return fullPageNote(f, colW,
+      "|cffd0d0d0Gathering the achievements you've earned together…|r\n|cff808080This can take a few seconds the first time you open it.|r", 18)
   end
 
   -- MEMORIES TOGETHER (top) --------------------------------------------------

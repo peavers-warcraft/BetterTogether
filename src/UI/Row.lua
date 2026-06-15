@@ -21,6 +21,16 @@ local FALLBACK = {
   ok = "Interface\\RaidFrame\\ReadyCheck-Ready", no = "Interface\\RaidFrame\\ReadyCheck-NotReady",
   wait = "Interface\\RaidFrame\\ReadyCheck-Waiting",
 }
+-- Apply chip art, handling atlas names (crisp at any size) vs file textures
+-- (cropped slightly to hide the baked-in border). Mirrors S.applyIcon; kept local
+-- since Row loads before Shared.
+local function applyIcon(tex, art)
+  if type(art) == "string" and not art:find("\\") and atlasExists(art) then
+    tex:SetTexCoord(0, 1, 0, 1); tex:SetAtlas(art)
+  else
+    tex:SetTexture(art); tex:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+  end
+end
 local function setMark(tex, state)
   if HAS_ATLAS then
     if state == true then tex:SetAtlas("common-icon-checkmark")
@@ -34,6 +44,11 @@ local function setMark(tex, state)
 end
 
 local ROW_HEIGHT, CHIP, MARK_SIZE = 32, 26, 18
+-- Two-column ("You … / Partner …") value layout: the Partner column is a fixed-width
+-- box pinned to the right edge, so the You column's right edge — and the gap between
+-- the two — stay constant from row to row. Without this the whole value is one
+-- right-aligned string and "You done" drifts left/right with the partner text.
+local PARTNER_COL, VALUE_GAP = 150, 14
 
 -- Circular icon chip: gold rim + dark fill + masked icon.
 local function makeChip(parent, size, iconPath)
@@ -54,7 +69,7 @@ local function makeChip(parent, size, iconPath)
 
   local icon = c:CreateTexture(nil, "ARTWORK")
   icon:SetPoint("CENTER"); icon:SetSize(size - 9, size - 9)
-  icon:SetTexture(iconPath); icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+  applyIcon(icon, iconPath)
   local iconMask = c:CreateMaskTexture()
   iconMask:SetAllPoints(icon); iconMask:SetTexture(CIRCLE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
   icon:AddMaskTexture(iconMask)
@@ -140,20 +155,54 @@ function Row.CreateInfo(parent, iconPath)
   if fontFile then label:SetFont(fontFile, 15) end
   f.label = label
   local value = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  value:SetPoint("RIGHT", f, "RIGHT", -4, 0); value:SetJustifyH("RIGHT")
+  value:SetPoint("RIGHT", f, "RIGHT", -4, 0); value:SetJustifyH("RIGHT"); value:SetWordWrap(false)
   if fontFile then value:SetFont(fontFile, 15) end
   f.value = value
+  -- Second value column (the "You …" side); only shown in two-column mode.
+  local value2 = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  value2:SetJustifyH("RIGHT"); value2:SetWordWrap(false); value2:Hide()
+  if fontFile then value2:SetFont(fontFile, 15) end
+  f.value2 = value2
   label:SetPoint("RIGHT", value, "LEFT", -8, 0); label:SetWordWrap(false)
 
+  -- Reattach the label between the chip and a given right-hand anchor (the active
+  -- value column), so single- and two-column modes both keep the label clamped.
+  local function anchorLabel(rightAnchor)
+    f.label:ClearAllPoints()
+    f.label:SetPoint("LEFT", f.chip, "RIGHT", 12, 0)
+    f.label:SetPoint("RIGHT", rightAnchor, "LEFT", -8, 0)
+  end
+
   local obj = { frame = f }
-  function obj:SetIcon(p) f.chip.icon:SetTexture(p); f.chip.icon:SetTexCoord(0.1, 0.9, 0.1, 0.9) end
+  function obj:SetIcon(p) applyIcon(f.chip.icon, p) end
   function obj:SetHover(enterFn, leaveFn) f._enter = enterFn; f._leave = leaveFn end
   function obj:SetClick(fn) f._click = fn end
   function obj:SetSelected(v) sel:SetShown(v and true or false) end
   function obj:Set(labelText, valueText, valueColor)
+    -- Single-column mode: value auto-sized (one RIGHT anchor) and right-aligned.
+    f.value2:Hide()
+    f.value:ClearAllPoints()
+    f.value:SetPoint("RIGHT", f, "RIGHT", -4, 0); f.value:SetJustifyH("RIGHT")
+    anchorLabel(f.value)
     f.label:SetText(labelText or ""); f.value:SetText(valueText or "")
     if valueColor then f.value:SetTextColor(valueColor[1], valueColor[2], valueColor[3])
     else f.value:SetTextColor(0.9, 0.9, 0.9) end
+  end
+  -- Two-column comparison: `partner` fills a fixed-width box pinned to the frame's
+  -- right edge (width set via LEFT+RIGHT anchors, so we never juggle SetWidth); `you`
+  -- right-aligns just left of that box, giving it a stable right edge across rows.
+  -- Colours are carried inline in the strings (|cff…|r).
+  function obj:SetSplit(labelText, youText, partnerText)
+    f.value:ClearAllPoints()
+    f.value:SetPoint("RIGHT", f, "RIGHT", -4, 0)
+    f.value:SetPoint("LEFT", f, "RIGHT", -(4 + PARTNER_COL), 0)
+    f.value:SetJustifyH("LEFT")
+    f.value:SetTextColor(0.9, 0.9, 0.9); f.value:SetText(partnerText or "")
+    f.value2:ClearAllPoints()
+    f.value2:SetPoint("RIGHT", f.value, "LEFT", -VALUE_GAP, 0)
+    f.value2:SetTextColor(0.9, 0.9, 0.9); f.value2:SetText(youText or ""); f.value2:Show()
+    anchorLabel(f.value2)
+    f.label:SetText(labelText or "")
   end
   function obj:SetWidth(w) f:SetWidth(w) end
   function obj:Show() f:Show() end

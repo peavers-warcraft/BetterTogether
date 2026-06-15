@@ -277,12 +277,15 @@ end
 function Comm.SendAchvDigest()
   if not ns.AchvSync then return end
   if not partnerTarget() and not Comm.selftest then return end
-  local payload = ns.AchvSync.EncodeDigest()
-  local n = math.max(1, math.ceil(#payload / INV_CHUNK))
-  for i = 1, n do
-    send(MSG.ACHVDIG .. "|" .. i .. "/" .. n .. "|" .. payload:sub((i - 1) * INV_CHUNK + 1, i * INV_CHUNK))
-  end
-  ns:Debug("ACHVDIG sent (" .. #payload .. " chars, " .. n .. " chunk(s))")
+  -- Wait for the (async) achievement scan so we never block the frame encoding it.
+  ns.AchvSync.Ensure(function()
+    local payload = ns.AchvSync.EncodeDigest()
+    local n = math.max(1, math.ceil(#payload / INV_CHUNK))
+    for i = 1, n do
+      send(MSG.ACHVDIG .. "|" .. i .. "/" .. n .. "|" .. payload:sub((i - 1) * INV_CHUNK + 1, i * INV_CHUNK))
+    end
+    ns:Debug("ACHVDIG sent (" .. #payload .. " chars, " .. n .. " chunk(s))")
+  end)
 end
 function Comm.RequestAchvEra(era)
   send(MSG.ACHVREQ .. "|" .. era)
@@ -291,12 +294,14 @@ function Comm.SendAchvEra(era)
   if not ns.AchvSync then return end
   if not partnerTarget() and not Comm.selftest then return end
   era = tonumber(era); if not era then return end
-  local payload = ns.AchvSync.EncodeEra(era)
-  local n = math.max(1, math.ceil(#payload / INV_CHUNK))
-  for i = 1, n do
-    send(MSG.ACHV .. "|" .. era .. "|" .. i .. "/" .. n .. "|" .. payload:sub((i - 1) * INV_CHUNK + 1, i * INV_CHUNK))
-  end
-  ns:Debug("ACHV era " .. era .. " sent (" .. #payload .. " chars, " .. n .. " chunk(s))")
+  ns.AchvSync.Ensure(function()
+    local payload = ns.AchvSync.EncodeEra(era)
+    local n = math.max(1, math.ceil(#payload / INV_CHUNK))
+    for i = 1, n do
+      send(MSG.ACHV .. "|" .. era .. "|" .. i .. "/" .. n .. "|" .. payload:sub((i - 1) * INV_CHUNK + 1, i * INV_CHUNK))
+    end
+    ns:Debug("ACHV era " .. era .. " sent (" .. #payload .. " chars, " .. n .. " chunk(s))")
+  end)
 end
 
 -- ---------------------------------------------------------------------------

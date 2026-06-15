@@ -1,5 +1,9 @@
 # Auto-deploy script for WoW addons (Windows)
-$ADDON_NAME = Split-Path -Leaf $PWD
+# Derive the addon name from the .toc file so the folder name (which WoW must
+# match exactly) is always correct, regardless of what the project dir is called.
+$toc = Get-ChildItem -Path . -Filter *.toc | Select-Object -First 1
+if (-not $toc) { Write-Host "[ERROR] No .toc file found" -ForegroundColor Red; exit 1 }
+$ADDON_NAME = $toc.BaseName
 $WOW_PATH = "C:\Program Files (x86)\World of Warcraft\_retail_"
 $TARGET_PATH = "$WOW_PATH\Interface\AddOns\$ADDON_NAME"
 

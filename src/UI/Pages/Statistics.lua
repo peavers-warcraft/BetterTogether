@@ -119,8 +119,7 @@ local function build(host)
   end
   f.hHeader = S.makeSectionHeader(f)
   f.hRows = {}; for i = 1, 8 do f.hRows[i] = Row.CreateInfo(f, S.I_KEY) end
-  f.hEmpty = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); f.hEmpty:SetTextColor(0.6, 0.6, 0.6)
-  if ff then f.hEmpty:SetFont(ff, 14) end
+  f.hEmpty = S.makeSubText(f)
   return f
 end
 

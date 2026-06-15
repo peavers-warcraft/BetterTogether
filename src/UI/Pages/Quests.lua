@@ -32,10 +32,12 @@ local detail = S.makePinController({
 })
 
 -- Build a hoverable/clickable row: hover previews, click pins this quest's details.
-local function questRow(id, title, value, status, you, partner)
+-- Returns the base row table; callers attach either `value` (single column) or
+-- `youText`/`partnerText` (the aligned two-column comparison).
+local function questRow(id, title, status, you, partner)
   local q = { id = id, title = title, status = status, you = you, partner = partner }
   return {
-    icon = S.I_QUEST, label = title, value = value,
+    icon = S.I_QUEST, label = title,
     selected = detail.isLocked(id),
     onEnter = function() detail.preview(id, q) end,
     onLeave = function() detail.leave() end,
@@ -66,18 +68,21 @@ local function getSections(snap)
     local mine = ownById[q.id]
     local title = resolveTitle(q.id, q.title)
     if mine then
-      both[#both + 1] = questRow(q.id, title,
-        "|cffffffffYou " .. progStr(mine) .. "|r   |cffa0a0a0Partner " .. progStr(q) .. "|r",
-        "both", mine, q)
+      local row = questRow(q.id, title, "both", mine, q)
+      row.youText = "|cffffffffYou " .. progStr(mine) .. "|r"
+      row.partnerText = "|cffa0a0a0Partner " .. progStr(q) .. "|r"
+      both[#both + 1] = row
     else
-      partnerOnly[#partnerOnly + 1] = questRow(q.id, title,
-        "|cffa0a0a0Partner " .. progStr(q) .. "|r", "partnerOnly", nil, q)
+      local row = questRow(q.id, title, "partnerOnly", nil, q)
+      row.value = "|cffa0a0a0Partner " .. progStr(q) .. "|r"
+      partnerOnly[#partnerOnly + 1] = row
     end
   end
   for _, q in ipairs(own) do
     if not partnerById[q.id] then
-      youOnly[#youOnly + 1] = questRow(q.id, resolveTitle(q.id, q.title),
-        "|cffffffffYou " .. progStr(q) .. "|r", "youOnly", q, nil)
+      local row = questRow(q.id, resolveTitle(q.id, q.title), "youOnly", q, nil)
+      row.value = "|cffffffffYou " .. progStr(q) .. "|r"
+      youOnly[#youOnly + 1] = row
     end
   end
 

@@ -66,12 +66,15 @@ local function normYear(y)
   return y
 end
 
--- Enumerate every completed achievement once, bucketed by era. Cached; invalidated
--- when a new achievement is earned. Entry: { id, y, m, d }.
-local function scanAll()
-  local byEra = {}
+-- Enumerate every completed achievement once, bucketed by era. The full DB is
+-- thousands of entries, so the scan is spread across frames: `onWork` (if given)
+-- is called every ACHV_BATCH achievements, letting an async driver yield. Pass
+-- nil for a blocking scan. Entry: { id, y, m, d }.
+local ACHV_BATCH = 200
+local function sweep(onWork)
+  local byEra, seen = {}, {}
   if not (GetCategoryList and GetCategoryNumAchievements and GetAchievementInfo) then return byEra end
-  local seen = {}
+  local work = 0
   for _, cat in ipairs(GetCategoryList()) do
     local n = GetCategoryNumAchievements(cat) or 0
     for i = 1, n do
@@ -85,20 +88,67 @@ local function scanAll()
           byEra[era][#byEra[era] + 1] = { id = id, y = yr, m = mo or 0, d = day or 0 }
         end
       end
+      if onWork then
+        work = work + 1
+        if work >= ACHV_BATCH then work = 0; onWork() end
+      end
     end
   end
   return byEra
 end
 
-local cache
-function AchvSync.All()
-  if not cache then cache = scanAll() end
-  return cache
+-- The scan runs asynchronously (a coroutine pumped by a per-frame ticker) so
+-- opening the page never blocks. `cache` stays nil until the first scan finishes;
+-- consumers go through AchvSync.Ensure and act in its callback. Mirrors how the
+-- Quests/Inventory pages stream their data in rather than building up front.
+local cache, scanTicker, scanCo, waiters = nil, nil, nil, {}
+
+-- True once the buckets are built (vs. nil = not scanned yet).
+function AchvSync.Ready() return cache ~= nil end
+
+local function flushWaiters()
+  local w = waiters; waiters = {}
+  for _, cb in ipairs(w) do cb(cache) end
 end
-function AchvSync.Invalidate() cache = nil end
+
+-- Ensure the per-era buckets exist, then fire `onReady(cache)` — immediately if
+-- already scanned, otherwise when the background scan completes.
+function AchvSync.Ensure(onReady)
+  if cache then if onReady then onReady(cache) end return end
+  if onReady then waiters[#waiters + 1] = onReady end
+  if scanTicker then return end                       -- a scan is already in flight
+  if not (C_Timer and C_Timer.NewTicker and coroutine) then
+    cache = sweep(nil); flushWaiters(); return         -- no async primitives: scan inline
+  end
+  scanCo = coroutine.create(function() return sweep(coroutine.yield) end)
+  scanTicker = C_Timer.NewTicker(0, function()
+    local ok, ret = coroutine.resume(scanCo)
+    if not ok then
+      if ns.Debug then ns:Debug("AchvSync scan error: " .. tostring(ret)) end
+      cache = {}
+    elseif coroutine.status(scanCo) ~= "dead" then
+      return                                            -- still scanning; resume next frame
+    else
+      cache = ret or {}
+    end
+    scanTicker:Cancel(); scanTicker, scanCo = nil, nil
+    flushWaiters()
+  end)
+end
+
+function AchvSync.All() return cache or {} end
+
+function AchvSync.Invalidate()
+  cache = nil
+  if scanTicker then scanTicker:Cancel(); scanTicker, scanCo = nil, nil end
+  if #waiters > 0 then                                 -- a consumer is still waiting: rescan now
+    local w = waiters; waiters = {}
+    for _, cb in ipairs(w) do AchvSync.Ensure(cb) end
+  end
+end
 
 -- Own achievements for one era as { id, y, m, d } (resolved live, not synced).
-function AchvSync.EraList(eraKey) return AchvSync.All()[eraKey] or {} end
+function AchvSync.EraList(eraKey) return (cache and cache[eraKey]) or {} end
 
 -- Wire: "<id>:<YYYYMMDD>" joined by ",". All-numeric, "," / ":" safe.
 function AchvSync.EncodeEra(eraKey)

@@ -359,8 +359,7 @@ local function renderQuestDetail()
   local q = panel._detailQuest
   if not q then return end
   panel.detailHint:Hide()
-  panel.detailChip.icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
-  panel.detailChip.icon:SetTexture(S.I_QUEST)
+  S.applyIcon(panel.detailChip.icon, S.I_QUEST)
   panel.detailChip:Show()
   panel.detailName:SetText(q.title or ("Quest #" .. (q.id or 0)))
   panel.detailName:SetTextColor(S.CREAM[1], S.CREAM[2], S.CREAM[3])

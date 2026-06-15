@@ -16,6 +16,7 @@ local COL_W   = 560          -- max content column width
 local CARD_H  = 72
 local ROW_H, ROW_GAP = 38, 6
 local SECTION_GAP = 30
+local HEAD_PAD = 10          -- top padding between a section header's rule and the text below it
 
 -- Captured once (matches the working pattern in Overview.lua). Pass explicit ""
 -- flags: FontString:SetFont treats flags as optional, but EditBox:SetFont
@@ -270,15 +271,10 @@ local function build(host)
   f.hero = makeHero(f)
 
   f.hSaved = S.makeSectionHeader(f)
-  f.savedEmpty = f:CreateFontString(nil, "OVERLAY")
-  setFont(f.savedEmpty, 13); f.savedEmpty:SetTextColor(0.5, 0.5, 0.5)
+  f.savedEmpty = S.makeSubText(f)
   f.savedEmpty:SetText("No other saved partners. Invite someone below to keep them on hand.")
 
-  f.hAdd = S.makeSectionHeader(f)
-  f.addHint = f:CreateFontString(nil, "OVERLAY")
-  setFont(f.addHint, 13); f.addHint:SetTextColor(0.6, 0.6, 0.6); f.addHint:SetJustifyH("LEFT")
-  f.addHint:SetWidth(COL_W)
-  f.addHint:SetText("Start typing a name — pick a suggestion (Tab) to fill the realm automatically. They'll get an invite popup to accept.")
+  f.hAdd = S.makeSectionHeader(f)   -- "Add a partner" description rides on the header's sub-text
 
   local box = makeInput(f, 190, 26)
   local acOn = enableNameAutocomplete(box)
@@ -315,12 +311,13 @@ local function refresh(f, ctx)
   local roster = (ns.Pairing and ns.Pairing.Roster()) or {}
   local active = ns.Pairing and ns.Pairing.PartnerName()
 
-  -- header helper: place a section header at y, return the y below its rule.
-  local function placeHeader(h, title, y)
+  -- header helper: place a section header at y, return the y below its rule (and
+  -- its optional sub-text). Pass `subtext` to render a description under the rule.
+  local function placeHeader(h, title, y, subtext)
     h.label:ClearAllPoints()
     h.label:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y)
-    S.styleHeader(h, title, W)
-    return y - 30
+    S.styleHeader(h, title, W, subtext)
+    return y - 30 - S.subHeight(h)
   end
 
   -- 1) Active partner ------------------------------------------------------
@@ -333,7 +330,7 @@ local function refresh(f, ctx)
 
   -- 2) Saved partners (everyone except the active one) ---------------------
   y = placeHeader(f.hSaved, "Saved partners", y)
-  y = y - 4
+  y = y - HEAD_PAD
 
   local shown = 0
   for _, full in ipairs(roster) do
@@ -355,7 +352,7 @@ local function refresh(f, ctx)
 
   if shown == 0 then
     f.savedEmpty:ClearAllPoints()
-    f.savedEmpty:SetPoint("TOPLEFT", f, "TOPLEFT", 4, y)
+    f.savedEmpty:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y)
     f.savedEmpty:Show()
     y = y - 28
   else
@@ -364,12 +361,11 @@ local function refresh(f, ctx)
   y = y - SECTION_GAP
 
   -- 3) Add a partner -------------------------------------------------------
-  y = placeHeader(f.hAdd, "Add a partner", y)
-  f.addHint:ClearAllPoints()
-  f.addHint:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y)
-  y = y - 26
+  y = placeHeader(f.hAdd, "Add a partner", y,
+    "Start typing a name — pick a suggestion (Tab) to fill the realm automatically. They'll get an invite popup to accept.")
+  y = y - HEAD_PAD
   f.inviteBox:ClearAllPoints()
-  f.inviteBox:SetPoint("TOPLEFT", f, "TOPLEFT", 6, y)
+  f.inviteBox:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y)
   f.inviteBtn:ClearAllPoints()
   f.inviteBtn:SetPoint("LEFT", f.inviteBox, "RIGHT", 10, 0)
   y = y - 40

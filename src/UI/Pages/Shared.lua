@@ -38,7 +38,17 @@ S.I_COORDS = "Interface\\Icons\\INV_Misc_Map_01"
 S.I_GOLD  = "Interface\\MoneyFrame\\UI-GoldIcon"
 S.I_GEAR  = "Interface\\Icons\\Trade_Engineering"
 S.I_SUP   = "Interface\\Icons\\INV_Potion_54"
+-- Crisp atlas "?" quest marker (vector-sharp at any chip size). The old
+-- Interface\GossipFrame\ActiveQuestIcon is a tiny low-res texture that looked
+-- blurry/pixelated blown up in our chips, so prefer a high-res atlas and only
+-- fall back to that file on clients that lack one.
 S.I_QUEST = "Interface\\GossipFrame\\ActiveQuestIcon"
+do
+  local info = C_Texture and C_Texture.GetAtlasInfo
+  for _, a in ipairs({ "QuestTurnin", "Quest-Important-TurnIn", "quest-recipe-turnin" }) do
+    if info and info(a) then S.I_QUEST = a; break end
+  end
+end
 S.I_BOSS  = "Interface\\Icons\\Achievement_Boss_Ragnaros"
 S.I_DUNGEON = "Interface\\Icons\\Achievement_ChallengeMode_Gold"
 S.I_DEATH = "Interface\\Icons\\Ability_Rogue_FeignDeath"
@@ -47,6 +57,24 @@ S.I_MOB   = "Interface\\Icons\\Ability_DualWield"
 
 S.CLASS_CIRCLES = "Interface\\TargetingFrame\\UI-Classes-Circles"
 S.HEADER_H = 18 + 6 + 8
+
+-- Subheader / descriptive sub-text shown beneath a section header. Centralised
+-- here so every page renders sub-text at the SAME size + colour (pages used to
+-- pick their own — 12 on Achievements, 13 on Partners, 14 on Statistics).
+S.SUBHEADER_SIZE  = 13
+S.SUBHEADER_COLOR = { 0.5, 0.5, 0.5 }   -- matches the |cff808080| muted note grey used across pages
+S.SUBHEADER_GAP   = 10   -- padding between the header's rule and its sub-text
+
+-- Standalone muted sub-text (empty-state lines, inline notes) that isn't owned
+-- by a header. Same font as a header's built-in sub so the two never clash.
+function S.makeSubText(parent)
+  local fs = parent:CreateFontString(nil, "OVERLAY")
+  local ff = GameFontHighlight:GetFont()
+  if ff then fs:SetFont(ff, S.SUBHEADER_SIZE, "") end
+  fs:SetTextColor(S.SUBHEADER_COLOR[1], S.SUBHEADER_COLOR[2], S.SUBHEADER_COLOR[3])
+  fs:SetJustifyH("LEFT"); fs:SetJustifyV("TOP")
+  return fs
+end
 
 -- ---------------------------------------------------------------------------
 -- Helpers
@@ -63,9 +91,25 @@ function S.classColor(cls)
   return 0.8, 0.8, 0.82
 end
 function S.hex(r, g, b) return string.format("|cff%02x%02x%02x", r * 255, g * 255, b * 255) end
+-- Apply art to a texture, transparently handling atlas names (crisp at any size)
+-- and file paths / fileIDs alike. File icons get a slight crop to hide their baked
+-- border; atlas art is shown whole. Used so the quest "?" and friends can be
+-- swapped to sharp atlas art without every call site caring which kind it is.
+function S.applyIcon(tex, art, crop)
+  if type(art) == "string" and not art:find("\\") and S.atlasExists(art) then
+    tex:SetTexCoord(0, 1, 0, 1); tex:SetAtlas(art)
+  else
+    tex:SetTexture(art)
+    if crop == false then tex:SetTexCoord(0, 1, 0, 1) else tex:SetTexCoord(0.1, 0.9, 0.1, 0.9) end
+  end
+end
 -- Inline texture for fontstrings. yOff nudges it down to sit on the text baseline.
+-- Atlas names use the |A| escape (crisp); file paths use |T|.
 function S.inlineIcon(p, sz, yoff)
   sz = sz or 14; yoff = yoff or -3
+  if type(p) == "string" and not p:find("\\") and S.atlasExists(p) then
+    return "|A:" .. p .. ":" .. sz .. ":" .. sz .. ":0:" .. yoff .. "|a "
+  end
   return "|T" .. p .. ":" .. sz .. ":" .. sz .. ":0:" .. yoff .. "|t "
 end
 function S.classDisplayName(cls)
@@ -136,19 +180,41 @@ function S.makeSectionHeader(parent)
   else
     line:SetVertexColor(S.GOLD[1], S.GOLD[2], S.GOLD[3], 0.5)
   end
-  return { label = label, diamond = diamond, line = line }
+  local sub = S.makeSubText(parent); sub:Hide()   -- optional descriptive line under the rule
+  return { label = label, diamond = diamond, line = line, sub = sub }
 end
 
 function S.hideHeader(h)
   h.label:Hide(); h.diamond:Hide(); h.line:Hide()
+  if h.sub then h.sub:Hide() end
 end
 
 -- Style a header (caller has already positioned h.label's TOPLEFT). Anchors the
--- diamond + line beneath the label and sizes the line to colW.
-function S.styleHeader(h, title, colW)
+-- diamond + line beneath the label and sizes the line to colW. Pass `subtext` to
+-- render a descriptive sub-line beneath the rule (aligned to the label, x=0);
+-- omit/"" to hide it. Use S.subHeight(h) to learn how far the sub extends below
+-- the rule when laying out the content that follows.
+function S.styleHeader(h, title, colW, subtext)
   h.label:SetText(title); h.label:Show()
   h.diamond:Show(); h.diamond:ClearAllPoints(); h.diamond:SetPoint("TOPLEFT", h.label, "BOTTOMLEFT", 3, -6)
   h.line:Show(); h.line:ClearAllPoints(); h.line:SetPoint("LEFT", h.diamond, "RIGHT", 6, 0); h.line:SetWidth(colW - 16)
+  if h.sub then
+    if subtext and subtext ~= "" then
+      h.sub:Show(); h.sub:SetWidth(colW)
+      h.sub:ClearAllPoints()
+      h.sub:SetPoint("TOPLEFT", h.diamond, "BOTTOMLEFT", -3, -S.SUBHEADER_GAP)
+      h.sub:SetText(subtext)
+    else
+      h.sub:Hide()
+    end
+  end
+end
+
+-- Vertical space the header's sub-text occupies below the rule (0 when hidden).
+-- Add this to S.HEADER_H to find where the next content row should start.
+function S.subHeight(h)
+  if h.sub and h.sub:IsShown() then return S.SUBHEADER_GAP + h.sub:GetStringHeight() end
+  return 0
 end
 
 -- ---------------------------------------------------------------------------
@@ -332,7 +398,12 @@ function S.makeRowPage(getSections)
           ri = ri + 1
           if not f._rows[ri] then f._rows[ri] = Row.CreateInfo(f, S.I_QUEST) end
           local r = f._rows[ri]
-          r:SetShown(true); r:SetWidth(colW); r:SetIcon(it.icon); r:Set(it.label, it.value)
+          r:SetShown(true); r:SetWidth(colW); r:SetIcon(it.icon)
+          if it.youText or it.partnerText then
+            r:SetSplit(it.label, it.youText, it.partnerText)
+          else
+            r:Set(it.label, it.value)
+          end
           r:SetHover(it.onEnter, it.onLeave)
           r:SetClick(it.onClick); r:SetSelected(it.selected)
           r.frame:ClearAllPoints()
