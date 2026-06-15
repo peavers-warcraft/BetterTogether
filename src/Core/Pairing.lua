@@ -39,10 +39,44 @@ local function myFullName()
 end
 
 -- ---------------------------------------------------------------------------
+-- Roster store + migration
+--   chardb.pair = { active = "Amy-Realm", roster = { "Amy-Realm", "Bob-Realm" } }
+--   active = the one partner whose data we send/accept right now (the bond gate).
+--   roster = every partner we've ever bonded, so switching back is one click and
+--            never makes you re-type a Name-Realm.
+-- ---------------------------------------------------------------------------
+local function ensureDB()
+  ns.chardb.pair = ns.chardb.pair or {}
+  local p = ns.chardb.pair
+  -- Migrate the old single-slot field (pre-roster saves).
+  if p.partnerName and not p.roster then
+    p.roster = { p.partnerName }
+    p.active = p.partnerName
+    p.partnerName = nil
+  end
+  p.roster = p.roster or {}
+  return p
+end
+
+-- Add a full Name-Realm to the roster (no duplicates, case-insensitive on short name).
+local function rosterAdd(full)
+  local p = ensureDB()
+  for _, n in ipairs(p.roster) do
+    if shortName(n) == shortName(full) then return end
+  end
+  p.roster[#p.roster + 1] = full
+end
+
+-- ---------------------------------------------------------------------------
 -- Bond accessors
 -- ---------------------------------------------------------------------------
 function Pairing.PartnerName()
-  return ns.chardb and ns.chardb.pair and ns.chardb.pair.partnerName
+  return ns.chardb and ns.chardb.pair and ns.chardb.pair.active
+end
+
+-- The saved roster (array of full Name-Realm strings). Always safe to iterate.
+function Pairing.Roster()
+  return (ns.chardb and ns.chardb.pair and ns.chardb.pair.roster) or {}
 end
 
 function Pairing.IsBonded(sender)
@@ -55,8 +89,10 @@ end
 -- Bonding
 -- ---------------------------------------------------------------------------
 local function bondTo(fullPartner)
-  ns.chardb.pair = ns.chardb.pair or {}
-  ns.chardb.pair.partnerName = fullPartner
+  local p = ensureDB()
+  rosterAdd(fullPartner)
+  p.active = fullPartner
+  ns.state.partner = nil   -- drop any prior partner's runtime data
   ns.state.partnerName = shortName(fullPartner)
   ns.state.linked = true
   pendingInviteTo, pendingInviteFrom = nil, nil
@@ -104,14 +140,76 @@ function Pairing.Decline()
   pendingInviteFrom = nil
 end
 
+-- Remove a partner from the roster entirely (forget them). If they were the
+-- active partner, also tears down the live bond.
+function Pairing.RemoveFromRoster(full)
+  local p = ensureDB()
+  for i, n in ipairs(p.roster) do
+    if shortName(n) == shortName(full) then table.remove(p.roster, i); break end
+  end
+  if p.active and shortName(p.active) == shortName(full) then
+    if ns.Comm then ns.Comm.SendBye() end
+    p.active = nil
+    ns.state.linked = false
+    ns.state.partner = nil
+    ns.state.partnerName = nil
+  end
+  ns:Print("removed |cffff8800" .. shortName(full) .. "|r from your partners.")
+  if ns.Dashboard then ns.Dashboard.Refresh() end
+end
+
+-- Unpair the *currently active* partner (and forget them).
 function Pairing.Unpair()
-  if Pairing.PartnerName() and ns.Comm then ns.Comm.SendBye() end
-  ns.chardb.pair = nil
-  ns.state.linked = false
-  ns.state.partner = nil
-  ns.state.partnerName = nil
-  pendingInviteTo, pendingInviteFrom = nil, nil
-  ns:Print("unpaired. Run |cffffff00/dr invite <name>|r to pair again.")
+  local active = Pairing.PartnerName()
+  if not active then return end
+  Pairing.RemoveFromRoster(active)
+end
+
+-- ---------------------------------------------------------------------------
+-- Switch which roster partner is active (the wife <-> old-friend flip).
+--   `full` is a Name-Realm already in the roster. After this returns, the bond
+--   gate (IsBonded) must accept `full` and reject everyone else, and the
+--   dashboard must show fresh data for `full` (not the previous partner's).
+--
+-- DESIGN DECISION (yours): what should switching *do* to the old partner?
+--   - Do we SendBye() to the person we're switching away from? They stay in our
+--     roster, so a Bye says "I stopped sharing for now" — honest, but they get a
+--     "partner left" blip every time you toggle. Or we switch silently and only
+--     Bye on a real RemoveFromRoster.
+--   - We MUST clear ns.state.partner so the old partner's snapshot/achievements
+--     don't linger on the dashboard under the new partner's name.
+--   - We then HELLO + request a fresh snapshot from `full` (see bondTo for the
+--     Comm calls), so their data starts flowing.
+--   - Guard: ignore if `full` isn't in the roster, or is already active.
+-- ---------------------------------------------------------------------------
+function Pairing.SetActive(full)
+  local p = ensureDB()
+  if not full then return end
+  -- Must be a known roster member; resolve to the stored full Name-Realm.
+  local resolved
+  for _, n in ipairs(p.roster) do
+    if shortName(n) == shortName(full) then resolved = n; break end
+  end
+  if not resolved then
+    ns:Print("|cffff8800" .. shortName(full) .. "|r isn't in your partners list.")
+    return
+  end
+  if p.active and shortName(p.active) == shortName(resolved) then return end  -- already active
+
+  -- Silent switch: no Bye to the previous partner (they stay in the roster, so
+  -- toggling back and forth shouldn't blip them with "partner left"). A Bye is
+  -- only sent on a real RemoveFromRoster.
+  p.active = resolved
+  ns.state.partner = nil          -- drop the old partner's snapshot/achievements
+  ns.state.partnerName = shortName(resolved)
+  ns.state.linked = true
+  ns:Print("now sharing with |cff44ff44" .. shortName(resolved) .. "|r")
+  if ns.Comm then
+    ns.Comm.SendHello()           -- announce to the new active partner
+    ns.Comm.QueueSnapshot(true)   -- push our current state to them
+    ns.Comm.QueueCard(true)
+    ns.Comm.RequestSnapshot()     -- pull theirs
+  end
   if ns.Dashboard then ns.Dashboard.Refresh() end
 end
 
@@ -162,6 +260,7 @@ end
 -- Resume a saved bond on login.
 -- ---------------------------------------------------------------------------
 function Pairing.Resume()
+  ensureDB()   -- migrate old single-slot saves into the roster on first login
   local p = Pairing.PartnerName()
   if not p then return end
   ns.state.partnerName = shortName(p)

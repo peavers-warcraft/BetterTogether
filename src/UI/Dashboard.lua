@@ -611,8 +611,22 @@ function Dashboard.Init()
   table.sort(pages, function(a, b) return (a.order or 99) < (b.order or 99) end)
   local prev
   for _, desc in ipairs(pages) do
+    -- A page can open a new category: extra space + a thin gold divider above it.
+    local gap = 2
+    if desc.separator and prev then
+      gap = 14
+      local div = nav:CreateTexture(nil, "ARTWORK")
+      div:SetHeight(1); div:SetColorTexture(1, 1, 1, 1)
+      if CreateColor then
+        div:SetGradient("HORIZONTAL", CreateColor(S.GOLD[1], S.GOLD[2], S.GOLD[3], 0.0),
+          CreateColor(S.GOLD[1], S.GOLD[2], S.GOLD[3], 0.45))
+      else div:SetVertexColor(S.GOLD[1], S.GOLD[2], S.GOLD[3], 0.3) end
+      div:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 6, -(gap / 2))
+      div:SetPoint("TOPRIGHT", prev, "BOTTOMRIGHT", -6, -(gap / 2))
+    end
+
     local b = makeNavButton(nav, desc)
-    if prev then b:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -2)
+    if prev then b:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -gap)
     else b:SetPoint("TOPLEFT", nav, "TOPLEFT", 0, 0) end
     prev = b
     table.insert(navButtons, b)

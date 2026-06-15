@@ -36,4 +36,5 @@ src\UI\Pages\Statistics.lua
 src\UI\Pages\Achievements.lua
 src\UI\Pages\Quests.lua
 src\UI\Pages\Inventory.lua
+src\UI\Pages\Partners.lua
 src\UI\Settings.lua

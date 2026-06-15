@@ -221,6 +221,24 @@ SlashCmdList["DUOREADY"] = function(msg)
   elseif cmd == "unpair" then
     if ns.Pairing then ns.Pairing.Unpair() end
 
+  elseif cmd == "partners" or cmd == "list" then
+    if ns.Pairing then
+      local roster, active = ns.Pairing.Roster(), ns.Pairing.PartnerName()
+      if #roster == 0 then
+        ns:Print("no saved partners — |cffffff00/dr invite <name>|r to add one.")
+      else
+        ns:Print("partners:")
+        for _, full in ipairs(roster) do
+          local s = ns.Pairing.ShortName(full)
+          local mark = (active and ns.Pairing.ShortName(active) == s) and " |cff44ff44(active)|r" or ""
+          ns:Print("  • " .. s .. mark)
+        end
+      end
+    end
+
+  elseif cmd == "switch" then
+    if ns.Pairing then ns.Pairing.SetActive(arg) end
+
   elseif cmd == "show" then
     if ns.Dashboard then ns.Dashboard.Show() end
 
@@ -256,6 +274,7 @@ SlashCmdList["DUOREADY"] = function(msg)
     else
       ns:Print("commands:")
       ns:Print("  |cffffff00/dr invite <name>|r — pair with a partner   |cffffff00/dr accept|r / |cffffff00/dr decline|r")
+      ns:Print("  |cffffff00/dr partners|r — list saved partners   |cffffff00/dr switch <name>|r — make one active")
       ns:Print("  |cffffff00/dr unpair|r · |cffffff00/dr sync|r · |cffffff00/dr lock|r · |cffffff00/dr demo|r · |cffffff00/dr show|r/|cffffff00hide|r · |cffffff00/dr reset|r")
       ns:Print("  |cffffff00/dr test|r (loopback) · |cffffff00/dr selftest|r · |cffffff00/dr debug|r · |cffffff00/dr|r (options)")
     end
