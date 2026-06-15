@@ -19,9 +19,11 @@ ns.Comm = Comm
 
 local MSG = {
   HELLO = "HELLO", SNAP = "SNAP", CARD = "CARD", REQ = "REQ", BYE = "BYE",
-  STATS = "STATS", RCHECK = "RCHECK", RCACK = "RCACK",
+  STATS = "STATS",
   INV = "INV", INVREQ = "INVREQ",
+  INVITEM = "INVITEM", INVITEMREQ = "INVITEMREQ",
   QLOG = "QLOG", QLOGREQ = "QLOGREQ",
+  ACHV = "ACHV", ACHVREQ = "ACHVREQ", ACHVDIG = "ACHVDIG", ACHVDIGREQ = "ACHVDIGREQ",
 }
 local INV_CHUNK = 230
 local SNAP_MIN_INTERVAL = 2.0
@@ -89,8 +91,12 @@ local function refillAndDrain()
   if #queue == 0 and ticker then ticker:Cancel(); ticker = nil end
 end
 
+-- Drain 1 token every 0.25s (~4 msg/s) rather than 1/s: bulk feeds (achievements,
+-- inventory, quests) are many chunks, and 1/s made them crawl. rawSend re-queues on
+-- the client's real throttle, so a higher drain rate can't drop messages — it just
+-- backs off automatically if we overshoot.
 local function ensureTicker()
-  if not ticker then ticker = C_Timer.NewTicker(1.0, refillAndDrain) end
+  if not ticker then ticker = C_Timer.NewTicker(0.25, refillAndDrain) end
 end
 
 local function enqueue(text, target)
@@ -126,6 +132,8 @@ local lastStatsAt, statsPending = 0, false
 local lastSnapSig, lastCardSig, lastStatsSig = nil, nil, nil
 local invBuf  -- inbound INV chunk reassembly buffer
 local qlogBuf -- inbound QLOG chunk reassembly buffer
+local achvBuf    -- inbound ACHV chunk reassembly buffer (keyed by era)
+local achvDigBuf -- inbound ACHVDIG chunk reassembly buffer
 
 local function doSendSnapshot()
   snapPending = false
@@ -218,20 +226,6 @@ function Comm.SendBye()
   rawSend({ text = MSG.BYE, target = partnerTarget() })
 end
 
--- Own readiness for a ready check: (ready bool, verdict string)
-local function selfReadiness()
-  ns.SelfState.Update()
-  local verdict = ns.Snapshot.ComputeVerdict(ns.state.self, ns.db)
-  return verdict == "ready", verdict
-end
-
-function Comm.SendReadyCheck()
-  local ready, verdict = selfReadiness()
-  send(MSG.RCHECK .. "|" .. (ready and 1 or 0) .. "|" .. verdict)
-  if ns.ReadyCheck and ns.ReadyCheck.OnSent then ns.ReadyCheck.OnSent(ready, verdict) end
-  ns:Print("ready check sent to partner")
-end
-
 -- Inventory: request the partner's bags / send our own (chunked).
 function Comm.RequestInventory()
   send(MSG.INVREQ)
@@ -247,6 +241,18 @@ function Comm.SendInventory()
   ns:Debug("INV sent (" .. #payload .. " chars, " .. n .. " chunk(s))")
 end
 
+-- On-demand item detail: the bulk INV feed is itemID-only, so the hover detail
+-- asks the partner for one item's full string (bonus IDs) by id. A single item
+-- string is well under the chunk size, so no chunking is needed.
+function Comm.RequestItemDetail(id)
+  send(MSG.INVITEMREQ .. "|" .. id)
+end
+function Comm.SendItemDetail(id)
+  if not ns.InvSync then return end
+  local str = ns.InvSync.ResolveItemString(id)
+  if str then send(MSG.INVITEM .. "|" .. id .. "|" .. str) end
+end
+
 -- Quest log: request the partner's quests / send our own (chunked, like INV).
 function Comm.RequestQuests()
   send(MSG.QLOGREQ)
@@ -260,6 +266,37 @@ function Comm.SendQuests()
     send(MSG.QLOG .. "|" .. i .. "/" .. n .. "|" .. payload:sub((i - 1) * INV_CHUNK + 1, i * INV_CHUNK))
   end
   ns:Debug("QLOG sent (" .. #payload .. " chars, " .. n .. " chunk(s))")
+end
+
+-- Achievements: a tiny per-era digest (counts + earliest date), then one era's
+-- full list on demand — bucketed so we only ever pull the era currently on screen
+-- (avoids dumping thousands of entries up front). Both chunked like QLOG.
+function Comm.RequestAchvDigest()
+  send(MSG.ACHVDIGREQ)
+end
+function Comm.SendAchvDigest()
+  if not ns.AchvSync then return end
+  if not partnerTarget() and not Comm.selftest then return end
+  local payload = ns.AchvSync.EncodeDigest()
+  local n = math.max(1, math.ceil(#payload / INV_CHUNK))
+  for i = 1, n do
+    send(MSG.ACHVDIG .. "|" .. i .. "/" .. n .. "|" .. payload:sub((i - 1) * INV_CHUNK + 1, i * INV_CHUNK))
+  end
+  ns:Debug("ACHVDIG sent (" .. #payload .. " chars, " .. n .. " chunk(s))")
+end
+function Comm.RequestAchvEra(era)
+  send(MSG.ACHVREQ .. "|" .. era)
+end
+function Comm.SendAchvEra(era)
+  if not ns.AchvSync then return end
+  if not partnerTarget() and not Comm.selftest then return end
+  era = tonumber(era); if not era then return end
+  local payload = ns.AchvSync.EncodeEra(era)
+  local n = math.max(1, math.ceil(#payload / INV_CHUNK))
+  for i = 1, n do
+    send(MSG.ACHV .. "|" .. era .. "|" .. i .. "/" .. n .. "|" .. payload:sub((i - 1) * INV_CHUNK + 1, i * INV_CHUNK))
+  end
+  ns:Debug("ACHV era " .. era .. " sent (" .. #payload .. " chars, " .. n .. " chunk(s))")
 end
 
 -- ---------------------------------------------------------------------------
@@ -346,20 +383,6 @@ local function dispatch(text, senderShort, trusted)
       ns.SharedStats.MergePartner(st)
     end
 
-  elseif mtype == MSG.RCHECK then
-    markLinked()
-    if PlaySound and SOUNDKIT and SOUNDKIT.READY_CHECK then PlaySound(SOUNDKIT.READY_CHECK) end
-    local theirReady, theirVerdict = rest:match("^(%d)|?(.*)$")
-    local ready, verdict = selfReadiness()
-    send(MSG.RCACK .. "|" .. (ready and 1 or 0) .. "|" .. verdict)
-    if ns.ReadyCheck and ns.ReadyCheck.OnIncoming then
-      ns.ReadyCheck.OnIncoming(ready, verdict, theirReady == "1", theirVerdict)
-    end
-
-  elseif mtype == MSG.RCACK then
-    local r, reason = rest:match("^(%d)|?(.*)$")
-    if ns.ReadyCheck and ns.ReadyCheck.OnResponse then ns.ReadyCheck.OnResponse(r == "1", reason) end
-
   elseif mtype == MSG.INVREQ then
     markLinked()
     if ns.InvSync then ns.InvSync.partnerWantsInv = true end
@@ -377,10 +400,21 @@ local function dispatch(text, senderShort, trusted)
       if have == total then
         local full = table.concat(invBuf, "", 1, total)
         invBuf = nil
-        if ns.InvSync then ns.InvSync.Decode(full) end
+        if ns.InvSync then
+          ns.InvSync.ClearDetailCache()   -- fresh feed: drop stale on-demand strings
+          ns.InvSync.Decode(full)
+        end
         if ns.Dashboard then ns.Dashboard.Refresh() end
       end
     end
+
+  elseif mtype == MSG.INVITEMREQ then
+    markLinked()
+    Comm.SendItemDetail(rest)
+
+  elseif mtype == MSG.INVITEM then
+    local id, str = rest:match("^(%d+)|(.*)$")
+    if id and ns.InvSync then ns.InvSync.StoreItemDetail(id, str) end
 
   elseif mtype == MSG.QLOGREQ then
     markLinked()
@@ -400,6 +434,49 @@ local function dispatch(text, senderShort, trusted)
         local full = table.concat(qlogBuf, "", 1, total)
         qlogBuf = nil
         if ns.QuestSync then ns.QuestSync.Decode(full) end
+        if ns.Dashboard then ns.Dashboard.Refresh() end
+      end
+    end
+
+  elseif mtype == MSG.ACHVDIGREQ then
+    markLinked()
+    Comm.SendAchvDigest()
+
+  elseif mtype == MSG.ACHVDIG then
+    local i, total, chunk = rest:match("^(%d+)/(%d+)|(.*)$")
+    i, total = tonumber(i), tonumber(total)
+    if i and total then
+      markLinked()
+      achvDigBuf = achvDigBuf or {}
+      achvDigBuf[i] = chunk or ""
+      local have = 0
+      for k = 1, total do if achvDigBuf[k] ~= nil then have = have + 1 end end
+      if have == total then
+        local full = table.concat(achvDigBuf, "", 1, total)
+        achvDigBuf = nil
+        if ns.AchvSync then ns.AchvSync.DecodeDigest(full) end
+        if ns.Dashboard then ns.Dashboard.Refresh() end
+      end
+    end
+
+  elseif mtype == MSG.ACHVREQ then
+    markLinked()
+    Comm.SendAchvEra(rest)
+
+  elseif mtype == MSG.ACHV then
+    local era, i, total, chunk = rest:match("^(%d+)|(%d+)/(%d+)|(.*)$")
+    i, total = tonumber(i), tonumber(total)
+    if era and i and total then
+      markLinked()
+      achvBuf = achvBuf or {}
+      achvBuf[era] = achvBuf[era] or {}
+      achvBuf[era][i] = chunk or ""
+      local have = 0
+      for k = 1, total do if achvBuf[era][k] ~= nil then have = have + 1 end end
+      if have == total then
+        local full = table.concat(achvBuf[era], "", 1, total)
+        achvBuf[era] = nil
+        if ns.AchvSync then ns.AchvSync.DecodeEra(tonumber(era), full) end
         if ns.Dashboard then ns.Dashboard.Refresh() end
       end
     end

@@ -258,6 +258,26 @@ local function renderItemDetail()
   local icon = (select(5, GetItemInfoInstant(id))) or 134400
   panel.detailChip.icon:SetTexture(icon); panel.detailChip:Show()
 
+  -- Awaiting the partner's full item string: show the (correct) name + a loading
+  -- note rather than the base item's stats, so the item level doesn't visibly jump
+  -- once the upgraded string lands.
+  if panel._detailPending then
+    local nm, _, quality = GetItemInfo(id)
+    panel.detailName:SetText(nm or ("item:" .. tostring(id)))
+    local qr, qg, qb = 0.83, 0.67, 0.33
+    local qc = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
+    if qc then qr, qg, qb = qc.r or qr, qc.g or qg, qc.b or qb end
+    panel.detailName:SetTextColor(qr, qg, qb)
+    panel.detailQChip:Hide(); panel.detailQLabel:Hide()
+    panel.detailText:ClearAllPoints()
+    panel.detailText:SetPoint("TOPLEFT", panel.detailBody, "TOPLEFT", 2, -60)
+    panel.detailText:SetText("|cffaaaaaaLoading partner's item details…|r")
+    panel.detailText:Show()
+    panel.detailBody:SetHeight(90)
+    if panel.detailScroll then panel.detailScroll:SetVerticalScroll(0); panel.detailScroll:UpdateScrollChildRect() end
+    return
+  end
+
   -- id may be a number (GetItemByID) or an item string with bonuses (GetHyperlink,
   -- so upgraded item level / stats render correctly).
   local data
@@ -388,6 +408,45 @@ local function renderQuestDetail()
   if panel.detailScroll then panel.detailScroll:UpdateScrollChildRect() end
 end
 
+-- Achievement detail (Achievements tab): reuses the item pane's chip/name/body to
+-- show a shared achievement. `a` = { id, name, icon, points, desc, together, status,
+-- youStr, partnerStr } — youStr/partnerStr are preformatted "earned on" dates (or nil).
+local function renderAchvDetail()
+  local a = panel._detailAchv
+  if not a then return end
+  panel.detailHint:Hide()
+  panel.detailChip.icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+  panel.detailChip.icon:SetTexture(a.icon or 134400)
+  panel.detailChip:Show()
+  panel.detailName:SetText(a.name or ("Achievement #" .. (a.id or 0)))
+  if a.together then panel.detailName:SetTextColor(S.GOLD[1], S.GOLD[2], S.GOLD[3])
+  else panel.detailName:SetTextColor(S.CREAM[1], S.CREAM[2], S.CREAM[3]) end
+
+  local parts = {}
+  if a.together then
+    parts[#parts + 1] = "|cff44ff44You both earned this the same day.|r"
+  else
+    local st = ({ youOnly = "|cff6cb6ffOnly you have earned this.|r",
+                  partnerOnly = "|cffffcc33Only your partner has earned this.|r" })[a.status]
+    if st then parts[#parts + 1] = st end
+  end
+  if (a.points or 0) > 0 then parts[#parts + 1] = "|cffffd100" .. a.points .. " points|r" end
+  parts[#parts + 1] = " "
+  if a.desc and a.desc ~= "" then
+    parts[#parts + 1] = "|cffd0d0d0" .. a.desc .. "|r"; parts[#parts + 1] = " "
+  end
+  parts[#parts + 1] = "|cffffd100You|r  " .. (a.youStr or "|cff808080not earned|r")
+  parts[#parts + 1] = "|cffffd100Partner|r  " .. (a.partnerStr or "|cff808080not earned|r")
+
+  panel.detailQChip:Hide(); panel.detailQLabel:Hide()
+  panel.detailText:ClearAllPoints()
+  panel.detailText:SetPoint("TOPLEFT", panel.detailBody, "TOPLEFT", 2, -60)
+  panel.detailText:SetText(table.concat(parts, "\n"))
+  panel.detailText:Show()
+  panel.detailBody:SetHeight(60 + (panel.detailText:GetStringHeight() or 0) + 14)
+  if panel.detailScroll then panel.detailScroll:UpdateScrollChildRect() end
+end
+
 -- Slim + recolor a UIPanelScrollFrameTemplate scrollbar (thin gold thumb, no arrows).
 local function styleScrollbar(sf)
   local sb = sf and sf.ScrollBar
@@ -467,8 +526,12 @@ function Dashboard.Init()
 
   -- Scrollable content host (fixed window; content scrolls — Plumber-style)
   host = CreateFrame("ScrollFrame", "DuoReadyScroll", content, "UIPanelScrollFrameTemplate")
+  -- Anchor top AND bottom to content so the scroll viewport's clip edge tracks the
+  -- real inset bounds; with only a fixed innerHeight() the last row spills past the
+  -- bottom border before scrolling (same fix as the detail pane). Width is set live.
   host:SetPoint("TOPLEFT", content, "TOPLEFT", HOST_X, -PAD)
-  host:SetSize(scrollWidth(), innerHeight())
+  host:SetPoint("BOTTOMLEFT", content, "BOTTOMLEFT", HOST_X, PAD)
+  host:SetWidth(scrollWidth())
   host:EnableMouseWheel(true)
   host:SetScript("OnMouseWheel", function(self, delta)
     local new = math.min(self:GetVerticalScrollRange(), math.max(0, self:GetVerticalScroll() - delta * 45))
@@ -485,8 +548,12 @@ function Dashboard.Init()
   panel.detailDiv = detailDiv
 
   local detail = CreateFrame("Frame", nil, content)
+  -- Anchor top AND bottom to content so the pane's height tracks the actual inset
+  -- bounds (not the innerHeight() estimate); otherwise the scroll frame's clip edge
+  -- lands just past the bottom border and long tooltips peek out beneath it.
   detail:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PAD, -PAD)
-  detail:SetSize(DETAIL_W, innerHeight())
+  detail:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", -PAD, PAD)
+  detail:SetWidth(DETAIL_W)
   panel.detail = detail
   local dHdr = S.makeSectionHeader(detail)
   dHdr.label:SetPoint("TOPLEFT", detail, "TOPLEFT", 0, 0)
@@ -583,24 +650,54 @@ function Dashboard.ApplyMode()
   panel.collapseBtn:SetText(ns.db.expanded and "–" or "+")
   Dashboard.Refresh()
 end
-function Dashboard.ShowItemDetail(id)
+-- pending=true means this is the base item shown while we await the partner's full
+-- string; renderItemDetail then shows a "loading" placeholder instead of the (about
+-- to change) base item level.
+function Dashboard.ShowItemDetail(id, pending)
   if not (panel and panel.detail:IsShown()) then return end
   panel.detailHint:Hide()
   panel._detailQuest = nil
+  panel._detailAchv = nil
   panel._detailID = id
+  panel._detailPending = pending and true or nil
   renderItemDetail()
+end
+
+-- A partner's full item string (bonus IDs) just arrived. If the detail pane is
+-- currently showing this item (matched by base itemID), upgrade it in place so the
+-- correct ilvl/stats render without the user re-clicking.
+function Dashboard.OnItemDetailArrived(id, itemString)
+  if not (panel and panel.detail:IsShown() and panel._detailID) then return end
+  local cur = panel._detailID
+  local curID = type(cur) == "number" and cur or tonumber(tostring(cur):match("item:(%d+)"))
+  if curID == tonumber(id) then
+    panel._detailID = itemString
+    panel._detailPending = nil
+    renderItemDetail()
+  end
 end
 function Dashboard.ShowQuestDetail(q)
   if not (panel and panel.detail:IsShown()) then return end
   panel.detailHint:Hide()
   panel._detailID = nil
+  panel._detailAchv = nil
   panel._detailQuest = q
   renderQuestDetail()
+end
+function Dashboard.ShowAchievementDetail(a)
+  if not (panel and panel.detail:IsShown()) then return end
+  panel.detailHint:Hide()
+  panel._detailID = nil
+  panel._detailQuest = nil
+  panel._detailAchv = a
+  renderAchvDetail()
 end
 function Dashboard.ClearDetail()
   if not panel then return end
   panel._detailID = nil
   panel._detailQuest = nil
+  panel._detailAchv = nil
+  panel._detailPending = nil
   if panel.detailChip then panel.detailChip:Hide() end
   if panel.detailQChip then panel.detailQChip:Hide() end
   if panel.detailQLabel then panel.detailQLabel:Hide() end
@@ -674,7 +771,7 @@ function Dashboard.Refresh()
   local detailOn = desc and desc.detail or false
   panel.detail:SetShown(detailOn)
   panel.detailDiv:SetShown(detailOn)
-  host:SetSize(scrollWidth(detailOn), innerHeight())
+  host:SetWidth(scrollWidth(detailOn))
 
   if desc then
     if not desc.frame and desc.build then desc.frame = desc.build(host) end
@@ -686,7 +783,8 @@ function Dashboard.Refresh()
     end
   end
   if detailOn then
-    if panel._detailQuest then renderQuestDetail()
+    if panel._detailAchv then renderAchvDetail()
+    elseif panel._detailQuest then renderQuestDetail()
     elseif panel._detailID then renderItemDetail() end
   end
   -- Hide the scrollbar entirely when the page fits (no stray arrows).

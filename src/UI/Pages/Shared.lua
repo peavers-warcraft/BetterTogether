@@ -230,28 +230,6 @@ function S.cNow(snap)
   return table.concat(t, "\n")
 end
 
--- Gear detail (Equipment tab): item level, durability, enchants, sockets
-function S.cGearOnly(snap)
-  local t = {}
-  if (snap.ilvl or 0) > 0 then table.insert(t, S.inlineIcon(S.I_GEAR) .. "Item level |cffffd100" .. snap.ilvl .. "|r") end
-  if snap.dur then
-    local slot = snap.durSlot and ns.Snapshot.SLOT_NAMES[snap.durSlot]
-    local low = (snap.durLowN or 0) > 0 and ("   |cffff8000" .. snap.durLowN .. " slot(s) low|r") or ""
-    table.insert(t, S.inlineIcon(S.ICON.durability) .. "Durability |cffffffff" .. snap.dur .. "%|r" .. (slot and (" |cff808080(" .. slot .. ")|r") or "") .. low)
-  end
-  if (snap.enchMask or 0) > 0 then
-    local names = {}
-    for i, slot in ipairs(ns.Snapshot.ENCHANT_SLOTS) do
-      if bit.band(snap.enchMask, 2 ^ (i - 1)) ~= 0 then table.insert(names, ns.Snapshot.SLOT_NAMES[slot] or ("slot" .. slot)) end
-    end
-    table.insert(t, S.inlineIcon(S.I_GEAR) .. "|cffff8000Missing enchant:|r " .. table.concat(names, ", "))
-  else
-    table.insert(t, S.inlineIcon(S.I_GEAR) .. "|cff44ff44All enchants present|r")
-  end
-  if (snap.gemMiss or 0) > 0 then table.insert(t, S.inlineIcon(S.I_GEAR) .. "|cffff8000Empty sockets:|r " .. snap.gemMiss) end
-  return table.concat(t, "\n")
-end
-
 -- Supplies detail (Inventory tab): consumables, bag space, wallet
 function S.cSupplies(snap)
   local t = {}
@@ -387,6 +365,66 @@ function S.makeRowPage(getSections)
 end
 
 -- ---------------------------------------------------------------------------
+-- Hover-preview + click-to-lock controller for the shared detail pane.
+-- Hovering a row previews its detail; clicking locks it (the lock survives hovering
+-- other rows); leaving a row restores the locked detail (or clears to the hint),
+-- deferred a beat so sliding between rows doesn't flash the restore state between.
+--
+-- opts.show(key, payload, mode)  render a row's detail. mode is "preview" (hover),
+--                                "lock" (click) or "restore" (revert after leave).
+-- opts.clear()                   restore the empty/hint pane (default Dashboard.ClearDetail).
+-- opts.onLock()                  run after a click changes the lock, e.g. to repaint
+--                                the selected-row highlight (default Dashboard.Refresh).
+-- opts.revertDelay               seconds before restoring on leave (default 0.05).
+--
+-- Returns { preview(key, payload), leave(), lock(key, payload), isLocked(key),
+-- unlock() }. unlock() drops the lock without touching the pane (pair with a
+-- caller-side clear, e.g. on tab re-open).
+function S.makePinController(opts)
+  opts = opts or {}
+  local show = opts.show
+  local clear = opts.clear or function() if ns.Dashboard and ns.Dashboard.ClearDetail then ns.Dashboard.ClearDetail() end end
+  local onLock = opts.onLock or function() if ns.Dashboard and ns.Dashboard.Refresh then ns.Dashboard.Refresh() end end
+  local revertDelay = opts.revertDelay or 0.05
+
+  local lockedKey, lockedPayload, revertTimer
+  local ctrl = {}
+
+  function ctrl.preview(key, payload)
+    if revertTimer then revertTimer:Cancel(); revertTimer = nil end
+    if show then show(key, payload, "preview") end
+  end
+
+  function ctrl.leave()
+    if revertTimer then revertTimer:Cancel() end
+    revertTimer = C_Timer.NewTimer(revertDelay, function()
+      revertTimer = nil
+      if lockedKey ~= nil then
+        if show then show(lockedKey, lockedPayload, "restore") end
+      else
+        clear()
+      end
+    end)
+  end
+
+  function ctrl.lock(key, payload)
+    if revertTimer then revertTimer:Cancel(); revertTimer = nil end
+    lockedKey, lockedPayload = key, payload
+    if show then show(key, payload, "lock") end
+    onLock()
+  end
+
+  function ctrl.isLocked(key) return lockedKey == key end
+
+  function ctrl.unlock()
+    if revertTimer then revertTimer:Cancel(); revertTimer = nil end
+    lockedKey, lockedPayload = nil, nil
+  end
+
+  return ctrl
+end
+
+-- ---------------------------------------------------------------------------
 -- Demo fixtures
 -- ---------------------------------------------------------------------------
 function S.demoSnap()
@@ -448,6 +486,29 @@ function S.demoStats()
       { map = "Mists of Tirna Scithe", level = 15, onTime = true, ts = 0 },
       { map = "The Dawnbreaker", level = 10, onTime = true, ts = 0 },
     } }
+end
+
+-- Achievements-together fixtures. Several id+date pairs are shared between own &
+-- partner (earned the SAME day → "together"); the rest are one-sided. Demo entries
+-- carry display fields (name/points/desc/icon) so the page renders without resolving
+-- fabricated ids through GetAchievementInfo.
+function S.demoAchvOwn()
+  return {
+    { id = 33,    y = 2006, m = 11, d = 20, name = "Level 60",                    points = 10, icon = "Interface\\Icons\\Achievement_Level_60",                    desc = "Reach level 60." },
+    { id = 2186,  y = 2009, m = 6,  d = 15, name = "Glory of the Ulduar Raider",  points = 25, icon = "Interface\\Icons\\Achievement_Boss_Yoggsaron_01",          desc = "Complete the Glory of the Ulduar Raider meta-achievement." },
+    { id = 4602,  y = 2010, m = 12, d = 8,  name = "Fall of the Lich King",       points = 25, icon = "Interface\\Icons\\Achievement_Dungeon_Icecrown_Frostmourne", desc = "Defeat the Lich King in Icecrown Citadel." },
+    { id = 11611, y = 2019, m = 2,  d = 2,  name = "Ahead of the Curve: Jaina",   points = 10, icon = "Interface\\Icons\\Achievement_Boss_JainaProudmoore",        desc = "Defeat Lady Jaina Proudmoore on Heroic before the next tier." },
+    { id = 545,   y = 2012, m = 10, d = 5,  name = "Pandaria Explorer",           points = 10, icon = "Interface\\Icons\\Achievement_Zone_Pandaria",                desc = "Explore Pandaria, revealing the covered areas of the map." },
+  }
+end
+function S.demoAchvPartner()
+  return {
+    { id = 33,    y = 2006, m = 11, d = 20, name = "Level 60",                    points = 10, icon = "Interface\\Icons\\Achievement_Level_60",                    desc = "Reach level 60." },
+    { id = 2186,  y = 2009, m = 6,  d = 15, name = "Glory of the Ulduar Raider",  points = 25, icon = "Interface\\Icons\\Achievement_Boss_Yoggsaron_01",          desc = "Complete the Glory of the Ulduar Raider meta-achievement." },
+    { id = 4602,  y = 2010, m = 12, d = 8,  name = "Fall of the Lich King",       points = 25, icon = "Interface\\Icons\\Achievement_Dungeon_Icecrown_Frostmourne", desc = "Defeat the Lich King in Icecrown Citadel." },
+    { id = 11611, y = 2019, m = 2,  d = 2,  name = "Ahead of the Curve: Jaina",   points = 10, icon = "Interface\\Icons\\Achievement_Boss_JainaProudmoore",        desc = "Defeat Lady Jaina Proudmoore on Heroic before the next tier." },
+    { id = 965,   y = 2015, m = 7,  d = 1,  name = "The Loremaster",              points = 50, icon = "Interface\\Icons\\Achievement_Quests_Completed_08",         desc = "Complete the Loremaster meta-achievement." },
+  }
 end
 
 return S

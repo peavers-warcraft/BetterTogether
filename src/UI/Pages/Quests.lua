@@ -23,21 +23,23 @@ local function progStr(q)
   return "in progress"
 end
 
--- The quest whose details are pinned in the right-hand pane.
-local selectedId
+-- Hover-preview + click-lock detail controller (S.makePinController): hovering a
+-- quest previews it in the right-hand pane, clicking locks it there.
+local detail = S.makePinController({
+  show = function(_, q)
+    if ns.Dashboard and ns.Dashboard.ShowQuestDetail then ns.Dashboard.ShowQuestDetail(q) end
+  end,
+})
 
--- Build a clickable row: clicking pins this quest's details in the detail pane.
+-- Build a hoverable/clickable row: hover previews, click pins this quest's details.
 local function questRow(id, title, value, status, you, partner)
+  local q = { id = id, title = title, status = status, you = you, partner = partner }
   return {
     icon = S.I_QUEST, label = title, value = value,
-    selected = (selectedId == id),
-    onClick = function()
-      selectedId = id
-      if ns.Dashboard and ns.Dashboard.ShowQuestDetail then
-        ns.Dashboard.ShowQuestDetail({ id = id, title = title, status = status, you = you, partner = partner })
-      end
-      if ns.Dashboard and ns.Dashboard.Refresh then ns.Dashboard.Refresh() end
-    end,
+    selected = detail.isLocked(id),
+    onEnter = function() detail.preview(id, q) end,
+    onLeave = function() detail.leave() end,
+    onClick = function() detail.lock(id, q) end,
   }
 end
 
@@ -100,10 +102,10 @@ local build, refresh = S.makeRowPage(getSections)
 
 ns.Dashboard.RegisterPage({
   key = "quests", label = "Quests", order = 4, detail = true,
-  detailTitle = "Quest Details", detailHint = "Click a quest to see its objectives.",
+  detailTitle = "Quest Details", detailHint = "Hover or click a quest to see its objectives.",
   build = build, refresh = refresh,
   onShow = function()
-    selectedId = nil
+    detail.unlock()
     if ns.Comm and ns.Comm.RequestQuests then ns.Comm.RequestQuests() end
   end,
 })

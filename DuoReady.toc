@@ -24,6 +24,7 @@ src\Core\Snapshot.lua
 src\Core\SharedStats.lua
 src\Core\InvSync.lua
 src\Core\QuestSync.lua
+src\Core\AchvSync.lua
 src\Core\Pairing.lua
 src\Core\Comm.lua
 
@@ -32,8 +33,7 @@ src\UI\Pages\Shared.lua
 src\UI\Dashboard.lua
 src\UI\Pages\Overview.lua
 src\UI\Pages\Statistics.lua
-src\UI\Pages\ReadyCheck.lua
+src\UI\Pages\Achievements.lua
 src\UI\Pages\Quests.lua
-src\UI\Pages\Equipment.lua
 src\UI\Pages\Inventory.lua
 src\UI\Settings.lua

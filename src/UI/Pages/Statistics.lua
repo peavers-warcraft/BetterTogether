@@ -2,7 +2,6 @@
   Statistics page. Two columns under a full-width "Adventured Together" tile row:
     left  — You-vs-Partner compare rows (shared/personal counters)
     right — Records (derived milestones) + recent Mythic+ history
-  Tiles and rows show contextual help on hover (GameTooltip).
 ]]
 
 local addonName, ns = ...
@@ -15,47 +14,21 @@ local COL_GUTTER = 28
 
 local function fmtNum(n) return BreakUpLargeNumbers and BreakUpLargeNumbers(n or 0) or tostring(n or 0) end
 
--- Big shared tiles (max-merged "together" totals). `help` shows on hover.
+-- Big shared tiles (max-merged "together" totals).
 local TILE_DEFS = {
-  { key = "bosses",   icon = S.I_BOSS,    label = "Bosses",        time = false,
-    help = "Raid and dungeon bosses defeated while grouped together." },
-  { key = "dungeons", icon = S.I_DUNGEON, label = "Dungeons",      time = false,
-    help = "Dungeons and Mythic+ runs completed together." },
-  { key = "mplus",    icon = S.I_KEY,     label = "Mythic+",       time = false,
-    help = "Mythic+ keystones completed together." },
-  { key = "togetherTime", icon = S.I_TIME, label = "Time Together", time = true,
-    help = "Total time spent grouped together out in the world." },
+  { key = "bosses",   icon = S.I_BOSS,    label = "Bosses",        time = false },
+  { key = "dungeons", icon = S.I_DUNGEON, label = "Dungeons",      time = false },
+  { key = "mplus",    icon = S.I_KEY,     label = "Mythic+",       time = false },
+  { key = "togetherTime", icon = S.I_TIME, label = "Time Together", time = true },
 }
 
 -- You-vs-Partner compare rows. own[key] / partner[key] shown side by side.
 local COMPARE_DEFS = {
-  { key = "quests",       icon = S.I_QUEST, label = "Quests",       help = "Quests each of you has turned in while together." },
-  { key = "deaths",       icon = S.I_DEATH, label = "Deaths",       help = "Times each of you has died while together." },
-  { key = "mobs",         icon = S.I_MOB,   label = "Mobs slain",   help = "Enemies each of you landed the killing blow on." },
-  { key = "achievements", icon = S.I_BOSS,  label = "Achievements", help = "Achievements earned while grouped together." },
-  { key = "levels",       icon = S.I_DUNGEON, label = "Levels gained", help = "Character levels gained while grouped together." },
+  { key = "quests",       icon = S.I_QUEST, label = "Quests" },
+  { key = "deaths",       icon = S.I_DEATH, label = "Deaths" },
+  { key = "mobs",         icon = S.I_MOB,   label = "Mobs slain" },
+  { key = "levels",       icon = S.I_DUNGEON, label = "Levels gained" },
 }
-
--- ---------------------------------------------------------------------------
--- Hover help (GameTooltip)
--- ---------------------------------------------------------------------------
--- Attach ONCE (in build). getTitle/getLines are read live on each hover, so the
--- displayed text can change between refreshes without re-hooking (HookScript
--- accumulates handlers — re-attaching every refresh would stack them).
-local function attachTip(frame, getTitle, getLines)
-  frame:EnableMouse(true)
-  frame:HookScript("OnEnter", function(self)
-    local title = getTitle()
-    if not title or title == "" then return end
-    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:SetText(title, S.CREAM[1], S.CREAM[2], S.CREAM[3])
-    for _, l in ipairs(getLines()) do
-      if l and l ~= "" then GameTooltip:AddLine(l, 0.78, 0.76, 0.68, true) end
-    end
-    GameTooltip:Show()
-  end)
-  frame:HookScript("OnLeave", function() GameTooltip:Hide() end)
-end
 
 -- ---------------------------------------------------------------------------
 -- Derived "Records" — milestones computed from the raw counters (no extra
@@ -65,7 +38,7 @@ end
 -- LEARNING CONTRIBUTION: this is where domain judgment lives — which milestones
 -- actually feel meaningful to a duo, and how to derive them. The primitives you
 -- have to work with are pre-computed below (bestKey, timedPct, etc.). Return a
--- list of { icon=, label=, value=, help= } rows. A couple are filled in as
+-- list of { icon=, label=, value= } rows. A couple are filled in as
 -- examples; add the ones you think matter and tune the formatting/colors.
 -- ---------------------------------------------------------------------------
 local function computeRecords(own, partner, shared)
@@ -78,7 +51,7 @@ local function computeRecords(own, partner, shared)
   local timedPct = (#runs > 0) and math.floor(timed / #runs * 100 + 0.5) or 0
 
   -- "Together since" — earliest grouped timestamp (min-merged across the pair).
-  local sinceVal, sinceHelp = "—", "When DuoReady first saw you grouped together."
+  local sinceVal = "—"
   local ft = shared("firstTogether")
   if ft > 0 then
     local days = math.max(0, math.floor(((GetServerTime and GetServerTime() or 0) - ft) / 86400))
@@ -87,17 +60,16 @@ local function computeRecords(own, partner, shared)
   end
 
   local rows = {
-    { icon = S.I_TIME, label = "Together since", value = sinceVal, help = sinceHelp },
+    { icon = S.I_TIME, label = "Together since", value = sinceVal },
     { icon = S.I_KEY,  label = "Best key",
-      value = bestKey > 0 and ("|cffa335ee+" .. bestKey .. "|r") or "—",
-      help = "Highest Mythic+ keystone you've completed together." },
+      value = bestKey > 0 and ("|cffa335ee+" .. bestKey .. "|r") or "—" },
   }
 
   -- TODO(you): add the records you care about. Ideas using the primitives above:
   --   • Timed runs %  →  value = timedPct .. "%"   (color by threshold?)
   --   • Boss kills per wipe  →  shared("bosses") / max(1, shared("wipes"))
   --   • K/D ratio  →  own.mobs / max(1, own.deaths)
-  -- Append { icon=, label=, value=, help= } entries to `rows` here.
+  -- Append { icon=, label=, value= } entries to `rows` here.
 
   return rows
 end
@@ -124,10 +96,9 @@ local function build(host)
     t.num:SetTextColor(S.CREAM[1], S.CREAM[2], S.CREAM[3])
     t.lbl = t:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); t.lbl:SetPoint("TOP", t.num, "BOTTOM", 0, -4)
     t.lbl:SetText(def.label); t.lbl:SetTextColor(0.75, 0.72, 0.6)
-    -- subtle hover glow + tooltip
+    -- subtle hover glow
     local hl = t:CreateTexture(nil, "BACKGROUND"); hl:SetAllPoints(t); hl:SetColorTexture(1, 1, 1, 0.04); hl:Hide()
     t:HookScript("OnEnter", function() hl:Show() end); t:HookScript("OnLeave", function() hl:Hide() end)
-    attachTip(t, function() return def.label end, function() return { def.help } end)
     f.tiles[def.key] = t
   end
 
@@ -136,9 +107,6 @@ local function build(host)
   f.cRows = {}
   for i, def in ipairs(COMPARE_DEFS) do
     local r = Row.CreateInfo(f, def.icon)
-    attachTip(r.frame, function() return def.label end, function()
-      return { def.help, r._tipBreakdown or "" }
-    end)
     f.cRows[i] = r
   end
 
@@ -147,8 +115,6 @@ local function build(host)
   f.rRows = {}
   for i = 1, 8 do
     local r = Row.CreateInfo(f, S.I_KEY)
-    -- single hook; reads the live title/help the refresh stamps on the row
-    attachTip(r.frame, function() return r._tipTitle end, function() return { r._tipHelp } end)
     f.rRows[i] = r
   end
   f.hHeader = S.makeSectionHeader(f)
@@ -213,8 +179,6 @@ local function refresh(f, ctx)
     local r = f.cRows[i]
     r:SetIcon(def.icon)
     r:Set(def.label, compareVal(own[def.key], partner[def.key]))
-    r._tipBreakdown = "You " .. fmtNum(own[def.key]) .. "  ·  Partner " .. fmtNum(partner[def.key]) ..
-      "  ·  Total " .. fmtNum((own[def.key] or 0) + (partner[def.key] or 0))
   end
   local _, leftH = stackRows(f.cRows, #COMPARE_DEFS, f.cHeader.diamond, leftW)
 
@@ -227,8 +191,6 @@ local function refresh(f, ctx)
     local d = recs[i]
     local r = f.rRows[i]
     r:SetIcon(d.icon or S.I_KEY); r:Set(d.label, d.value)
-    r._tipTitle = d.help and d.label or nil
-    r._tipHelp = d.help
   end
   local _, recH = stackRows(f.rRows, nRec, f.rHeader.diamond, rightW)
 

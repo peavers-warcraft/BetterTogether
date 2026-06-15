@@ -209,10 +209,6 @@ SlashCmdList["DUOREADY"] = function(msg)
   elseif cmd == "stats" then
     if ns.Dashboard then ns.Dashboard.OpenTab("statistics") end
 
-  elseif cmd == "readycheck" or cmd == "rc" then
-    if ns.Dashboard then ns.Dashboard.OpenTab("readycheck") end
-    if ns.Comm and ns.Comm.SendReadyCheck then ns.Comm.SendReadyCheck() end
-
   elseif cmd == "invite" then
     if ns.Pairing then ns.Pairing.Invite(arg) end
 
