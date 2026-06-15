@@ -1,0 +1,15 @@
+package-as: DuoReady
+
+ignore:
+  - .git
+  - .github
+  - .gitignore
+  - .editorconfig
+  - .pkgmeta
+  - .peavers.yml
+  - README.md
+  - CHANGELOG.md
+  - LICENSE
+  - DuoReady-Spec.md
+  - local_deploy.sh
+  - local_deploy.ps1

@@ -53,7 +53,11 @@ deploy_to_path() {
     rm -f "$target_path/local_deploy.sh"
     rm -f "$target_path/local_deploy.ps1"
     rm -rf "$target_path/.git"
+    rm -rf "$target_path/.github"
     rm -f "$target_path/.gitignore"
+    rm -f "$target_path/.editorconfig"
+    rm -f "$target_path/.pkgmeta"
+    rm -f "$target_path/.peavers.yml"
     rm -rf "$target_path/.idea"
     rm -f "$target_path"/*.iml
     rm -f "$target_path/DuoReady-Spec.md"

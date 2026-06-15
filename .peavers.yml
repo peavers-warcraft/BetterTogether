@@ -1,0 +1,9 @@
+# .peavers.yml - Addon metadata for peavers.io website
+
+# Icon to display on website
+iconType: GroupNeedMoreIcon
+
+# Tags for filtering and categorization
+tags:
+  - social
+  - utility
