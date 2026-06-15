@@ -1,0 +1,269 @@
+--[[ UI/Pages/Statistics.lua
+  Statistics page. Two columns under a full-width "Adventured Together" tile row:
+    left  — You-vs-Partner compare rows (shared/personal counters)
+    right — Records (derived milestones) + recent Mythic+ history
+  Tiles and rows show contextual help on hover (GameTooltip).
+]]
+
+local addonName, ns = ...
+local S = ns.UI.Shared
+local Row = ns.UI.Row
+
+local SECTION_GAP = 24
+local TILE_H = 116
+local COL_GUTTER = 28
+
+local function fmtNum(n) return BreakUpLargeNumbers and BreakUpLargeNumbers(n or 0) or tostring(n or 0) end
+
+-- Big shared tiles (max-merged "together" totals). `help` shows on hover.
+local TILE_DEFS = {
+  { key = "bosses",   icon = S.I_BOSS,    label = "Bosses",        time = false,
+    help = "Raid and dungeon bosses defeated while grouped together." },
+  { key = "dungeons", icon = S.I_DUNGEON, label = "Dungeons",      time = false,
+    help = "Dungeons and Mythic+ runs completed together." },
+  { key = "mplus",    icon = S.I_KEY,     label = "Mythic+",       time = false,
+    help = "Mythic+ keystones completed together." },
+  { key = "togetherTime", icon = S.I_TIME, label = "Time Together", time = true,
+    help = "Total time spent grouped together out in the world." },
+}
+
+-- You-vs-Partner compare rows. own[key] / partner[key] shown side by side.
+local COMPARE_DEFS = {
+  { key = "quests",       icon = S.I_QUEST, label = "Quests",       help = "Quests each of you has turned in while together." },
+  { key = "deaths",       icon = S.I_DEATH, label = "Deaths",       help = "Times each of you has died while together." },
+  { key = "mobs",         icon = S.I_MOB,   label = "Mobs slain",   help = "Enemies each of you landed the killing blow on." },
+  { key = "achievements", icon = S.I_BOSS,  label = "Achievements", help = "Achievements earned while grouped together." },
+  { key = "levels",       icon = S.I_DUNGEON, label = "Levels gained", help = "Character levels gained while grouped together." },
+}
+
+-- ---------------------------------------------------------------------------
+-- Hover help (GameTooltip)
+-- ---------------------------------------------------------------------------
+-- Attach ONCE (in build). getTitle/getLines are read live on each hover, so the
+-- displayed text can change between refreshes without re-hooking (HookScript
+-- accumulates handlers — re-attaching every refresh would stack them).
+local function attachTip(frame, getTitle, getLines)
+  frame:EnableMouse(true)
+  frame:HookScript("OnEnter", function(self)
+    local title = getTitle()
+    if not title or title == "" then return end
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText(title, S.CREAM[1], S.CREAM[2], S.CREAM[3])
+    for _, l in ipairs(getLines()) do
+      if l and l ~= "" then GameTooltip:AddLine(l, 0.78, 0.76, 0.68, true) end
+    end
+    GameTooltip:Show()
+  end)
+  frame:HookScript("OnLeave", function() GameTooltip:Hide() end)
+end
+
+-- ---------------------------------------------------------------------------
+-- Derived "Records" — milestones computed from the raw counters (no extra
+-- tracking). own/partner are the two stat tables; shared(k) is the max-merged
+-- "together" value for a shared counter.
+--
+-- LEARNING CONTRIBUTION: this is where domain judgment lives — which milestones
+-- actually feel meaningful to a duo, and how to derive them. The primitives you
+-- have to work with are pre-computed below (bestKey, timedPct, etc.). Return a
+-- list of { icon=, label=, value=, help= } rows. A couple are filled in as
+-- examples; add the ones you think matter and tune the formatting/colors.
+-- ---------------------------------------------------------------------------
+local function computeRecords(own, partner, shared)
+  local runs = own.mplusRuns or {}
+  local bestKey, timed = 0, 0
+  for _, r in ipairs(runs) do
+    if (r.level or 0) > bestKey then bestKey = r.level end
+    if r.onTime then timed = timed + 1 end
+  end
+  local timedPct = (#runs > 0) and math.floor(timed / #runs * 100 + 0.5) or 0
+
+  -- "Together since" — earliest grouped timestamp (min-merged across the pair).
+  local sinceVal, sinceHelp = "—", "When DuoReady first saw you grouped together."
+  local ft = shared("firstTogether")
+  if ft > 0 then
+    local days = math.max(0, math.floor(((GetServerTime and GetServerTime() or 0) - ft) / 86400))
+    local when = date and date("%b %d, %Y", ft) or tostring(ft)
+    sinceVal = "|cffffffff" .. when .. "|r  |cff44ff44(" .. days .. "d)|r"
+  end
+
+  local rows = {
+    { icon = S.I_TIME, label = "Together since", value = sinceVal, help = sinceHelp },
+    { icon = S.I_KEY,  label = "Best key",
+      value = bestKey > 0 and ("|cffa335ee+" .. bestKey .. "|r") or "—",
+      help = "Highest Mythic+ keystone you've completed together." },
+  }
+
+  -- TODO(you): add the records you care about. Ideas using the primitives above:
+  --   • Timed runs %  →  value = timedPct .. "%"   (color by threshold?)
+  --   • Boss kills per wipe  →  shared("bosses") / max(1, shared("wipes"))
+  --   • K/D ratio  →  own.mobs / max(1, own.deaths)
+  -- Append { icon=, label=, value=, help= } entries to `rows` here.
+
+  return rows
+end
+
+-- ---------------------------------------------------------------------------
+-- Build
+-- ---------------------------------------------------------------------------
+local function build(host)
+  local f = CreateFrame("Frame", nil, host); f:SetSize(10, 10)
+  local ff = GameFontHighlight:GetFont()
+
+  -- tiles
+  f.tHeader = S.makeSectionHeader(f)
+  f.tiles = {}
+  for _, def in ipairs(TILE_DEFS) do
+    local t = CreateFrame("Frame", nil, f, "BackdropTemplate"); t:SetHeight(TILE_H)
+    t:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8",
+      edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+    t:SetBackdropColor(0.09, 0.095, 0.12, 0.85)
+    t:SetBackdropBorderColor(S.GOLD[1] * 0.5, S.GOLD[2] * 0.5, S.GOLD[3] * 0.5, 0.6)
+    t.chip = Row.MakeChip(t, 36, def.icon); t.chip:SetPoint("TOP", t, "TOP", 0, -12)
+    t.num = t:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge"); t.num:SetPoint("TOP", t.chip, "BOTTOM", 0, -8)
+    if ff then t.num:SetFont(ff, 26) end
+    t.num:SetTextColor(S.CREAM[1], S.CREAM[2], S.CREAM[3])
+    t.lbl = t:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); t.lbl:SetPoint("TOP", t.num, "BOTTOM", 0, -4)
+    t.lbl:SetText(def.label); t.lbl:SetTextColor(0.75, 0.72, 0.6)
+    -- subtle hover glow + tooltip
+    local hl = t:CreateTexture(nil, "BACKGROUND"); hl:SetAllPoints(t); hl:SetColorTexture(1, 1, 1, 0.04); hl:Hide()
+    t:HookScript("OnEnter", function() hl:Show() end); t:HookScript("OnLeave", function() hl:Hide() end)
+    attachTip(t, function() return def.label end, function() return { def.help } end)
+    f.tiles[def.key] = t
+  end
+
+  -- left column: compare rows
+  f.cHeader = S.makeSectionHeader(f)
+  f.cRows = {}
+  for i, def in ipairs(COMPARE_DEFS) do
+    local r = Row.CreateInfo(f, def.icon)
+    attachTip(r.frame, function() return def.label end, function()
+      return { def.help, r._tipBreakdown or "" }
+    end)
+    f.cRows[i] = r
+  end
+
+  -- right column: records + recent M+ history
+  f.rHeader = S.makeSectionHeader(f)
+  f.rRows = {}
+  for i = 1, 8 do
+    local r = Row.CreateInfo(f, S.I_KEY)
+    -- single hook; reads the live title/help the refresh stamps on the row
+    attachTip(r.frame, function() return r._tipTitle end, function() return { r._tipHelp } end)
+    f.rRows[i] = r
+  end
+  f.hHeader = S.makeSectionHeader(f)
+  f.hRows = {}; for i = 1, 8 do f.hRows[i] = Row.CreateInfo(f, S.I_KEY) end
+  f.hEmpty = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); f.hEmpty:SetTextColor(0.6, 0.6, 0.6)
+  if ff then f.hEmpty:SetFont(ff, 14) end
+  return f
+end
+
+local function compareVal(you, partner)
+  return "|cffffffffYou " .. fmtNum(you) .. "|r    |cffa0a0a0Partner " .. fmtNum(partner) ..
+    "|r    |cff44ff44Total " .. fmtNum((you or 0) + (partner or 0)) .. "|r"
+end
+
+-- Lay out a stack of pooled rows beneath an anchor; returns (lastAnchor, height).
+local function stackRows(rows, n, headerDiamond, colW)
+  local anchor = headerDiamond
+  for i = 1, n do
+    local r = rows[i]
+    r:SetShown(true); r:SetWidth(colW)
+    r.frame:ClearAllPoints()
+    r.frame:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", i == 1 and -3 or 0, i == 1 and -8 or -3)
+    anchor = r.frame
+  end
+  for i = n + 1, #rows do rows[i]:SetShown(false) end
+  local h = (n > 0) and (8 + n * Row.HEIGHT + (n - 1) * 3) or 0
+  return anchor, S.HEADER_H + h
+end
+
+-- ---------------------------------------------------------------------------
+-- Refresh
+-- ---------------------------------------------------------------------------
+local function refresh(f, ctx)
+  local W = ctx.width; f:SetWidth(W)
+  local leftW = math.min(560, math.floor((W - COL_GUTTER) / 2))
+  local rightW = math.min(560, W - COL_GUTTER - leftW)
+  local rightX = leftW + COL_GUTTER
+
+  local own = (ns.db.demoMode and S.demoStats()) or (ns.chardb and ns.chardb.stats) or {}
+  local partner = (ns.db.demoMode and ctx.snap.stats) or (ns.state.partner and ns.state.partner.stats) or {}
+  local function shared(k) return math.max(own[k] or 0, partner[k] or 0) end
+
+  -- tiles (full width)
+  f.tHeader.label:ClearAllPoints(); f.tHeader.label:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+  S.styleHeader(f.tHeader, "Adventured Together", W)
+  local gap = 14
+  local tileW = math.floor((W - (#TILE_DEFS - 1) * gap) / #TILE_DEFS)
+  local x = 0
+  for _, def in ipairs(TILE_DEFS) do
+    local t = f.tiles[def.key]
+    t:ClearAllPoints(); t:SetPoint("TOPLEFT", f.tHeader.diamond, "BOTTOMLEFT", -3 + x, -10); t:SetWidth(tileW)
+    local v = shared(def.key)
+    t.num:SetText(def.time and S.fmtTime(v) or fmtNum(v))
+    x = x + tileW + gap
+  end
+  local tileAnchor = f.tiles[TILE_DEFS[1].key]
+
+  -- LEFT: You vs Partner
+  f.cHeader.label:ClearAllPoints(); f.cHeader.label:SetPoint("TOPLEFT", tileAnchor, "BOTTOMLEFT", 3, -SECTION_GAP)
+  S.styleHeader(f.cHeader, "You vs Partner", leftW)
+  for i, def in ipairs(COMPARE_DEFS) do
+    local r = f.cRows[i]
+    r:SetIcon(def.icon)
+    r:Set(def.label, compareVal(own[def.key], partner[def.key]))
+    r._tipBreakdown = "You " .. fmtNum(own[def.key]) .. "  ·  Partner " .. fmtNum(partner[def.key]) ..
+      "  ·  Total " .. fmtNum((own[def.key] or 0) + (partner[def.key] or 0))
+  end
+  local _, leftH = stackRows(f.cRows, #COMPARE_DEFS, f.cHeader.diamond, leftW)
+
+  -- RIGHT (top): Records
+  f.rHeader.label:ClearAllPoints(); f.rHeader.label:SetPoint("TOPLEFT", tileAnchor, "BOTTOMLEFT", 3 + rightX, -SECTION_GAP)
+  S.styleHeader(f.rHeader, "Records", rightW)
+  local recs = computeRecords(own, partner, shared)
+  local nRec = math.min(#recs, #f.rRows)
+  for i = 1, nRec do
+    local d = recs[i]
+    local r = f.rRows[i]
+    r:SetIcon(d.icon or S.I_KEY); r:Set(d.label, d.value)
+    r._tipTitle = d.help and d.label or nil
+    r._tipHelp = d.help
+  end
+  local _, recH = stackRows(f.rRows, nRec, f.rHeader.diamond, rightW)
+
+  -- RIGHT (below records): Recent Mythic+
+  f.hHeader.label:ClearAllPoints(); f.hHeader.label:SetPoint("TOPLEFT", f.rHeader.label, "TOPLEFT", 0, -(recH + SECTION_GAP))
+  S.styleHeader(f.hHeader, "Recent Mythic+", rightW)
+  local runs = own.mplusRuns or {}
+  local n = math.min(#runs, 8)
+  local hAnchor = f.hHeader.diamond
+  for i = 1, n do
+    local rr = runs[i]
+    local r = f.hRows[i]
+    r:SetShown(true); r:SetWidth(rightW); r:SetIcon(S.I_KEY)
+    r:Set("|cffa335ee+" .. (rr.level or 0) .. "|r  " .. (rr.map and tostring(rr.map) or "Dungeon"),
+      rr.onTime and "|cff44ff44timed|r" or "|cffff5555over time|r")
+    r.frame:ClearAllPoints()
+    r.frame:SetPoint("TOPLEFT", hAnchor, "BOTTOMLEFT", i == 1 and -3 or 0, i == 1 and -8 or -3)
+    hAnchor = r.frame
+  end
+  for i = n + 1, 8 do f.hRows[i]:SetShown(false) end
+  local histH
+  if n == 0 then
+    f.hEmpty:Show(); f.hEmpty:ClearAllPoints(); f.hEmpty:SetPoint("TOPLEFT", f.hHeader.diamond, "BOTTOMLEFT", -3, -10)
+    f.hEmpty:SetText("No Mythic+ runs together yet.")
+    histH = S.HEADER_H + 10 + f.hEmpty:GetStringHeight()
+  else
+    f.hEmpty:Hide()
+    histH = S.HEADER_H + 8 + n * Row.HEIGHT + (n - 1) * 3
+  end
+  local rightH = recH + SECTION_GAP + histH
+
+  -- page height = tiles block + tallest column
+  local h = S.HEADER_H + 10 + TILE_H + SECTION_GAP + math.max(leftH, rightH) + 14
+  f:SetHeight(h)
+  return h
+end
+
+ns.Dashboard.RegisterPage({ key = "statistics", label = "Statistics", order = 2, build = build, refresh = refresh })

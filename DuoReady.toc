@@ -1,0 +1,32 @@
+## Interface: 120000
+## Title: DuoReady
+## Notes: Partner readiness dashboard for duo play.
+## Author: Chris (peavers-warcraft)
+## Version: 1.0.0
+## SavedVariables: DuoReadyDB
+## SavedVariablesPerCharacter: DuoReadyCharDB
+## IconTexture: Interface\Icons\INV_Misc_GroupNeedMore
+## X-Website: https://github.com/peavers-warcraft
+
+# Load order matters: Core sets up the namespace + event dispatch first, then the
+# data layer, then comms, then the UI (Row before Dashboard which uses it).
+
+Core.lua
+Consumables.lua
+SelfState.lua
+Snapshot.lua
+SharedStats.lua
+InvSync.lua
+QuestSync.lua
+Pairing.lua
+Comm.lua
+UI/Row.lua
+UI/Pages/Shared.lua
+UI/Dashboard.lua
+UI/Pages/Overview.lua
+UI/Pages/Statistics.lua
+UI/Pages/ReadyCheck.lua
+UI/Pages/Quests.lua
+UI/Pages/Equipment.lua
+UI/Pages/Inventory.lua
+UI/Settings.lua
