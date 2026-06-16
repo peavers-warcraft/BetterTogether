@@ -3,7 +3,7 @@
 ## Title: BetterTogether
 ## Notes: Partner readiness dashboard for duo play.
 ## Author: Peavers
-## Version: 1.0.0
+## Version: 1.0.1
 
 ## IconTexture: Interface\Icons\INV_Misc_GroupNeedMore
 ## Category-enUS: Peavers
