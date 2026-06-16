@@ -170,6 +170,53 @@ function Widgets.SubText(parent)
 end
 
 -- ---------------------------------------------------------------------------
+-- Loading spinner: a ring of circular gold dots whose brightness chases around the
+-- circle (a "comet" trail), so any wait reads as a clean, centered loading state.
+-- Driven by a single light OnUpdate that only runs while shown — call :Start() to
+-- play and :Stop() to hide. Themed in gold to match the rest of the panel.
+-- ---------------------------------------------------------------------------
+--- @param parent table
+--- @param size number|nil Diameter of the spinner in pixels (default 40).
+--- @return table spinner Frame with :Start() / :Stop().
+function Widgets.Spinner(parent, size)
+  size = size or 40
+  local s = CreateFrame("Frame", nil, parent)
+  s:SetSize(size, size)
+
+  local N = 8
+  local dotSize = math.max(3, size * 0.17)
+  local radius = size / 2 - dotSize / 2
+  s.dots = {}
+  for i = 1, N do
+    local ang = (i - 1) / N * (2 * math.pi)
+    local d = s:CreateTexture(nil, "OVERLAY")
+    d:SetSize(dotSize, dotSize)
+    d:SetColorTexture(GOLD[1], GOLD[2], GOLD[3], 1)
+    local mask = s:CreateMaskTexture()
+    mask:SetAllPoints(d); mask:SetTexture(MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    d:AddMaskTexture(mask)
+    d:SetPoint("CENTER", s, "CENTER", math.cos(ang) * radius, -math.sin(ang) * radius)
+    s.dots[i] = d
+  end
+
+  local PERIOD = 0.85   -- seconds for the bright spot to travel once around the ring
+  local function onUpdate(self, dt)
+    self._t = (self._t or 0) + dt
+    local head = (self._t / PERIOD) % 1
+    for i = 1, N do
+      -- how far this dot sits *behind* the moving head (0 = at the head, brightest)
+      local p = ((i - 1) / N - head) % 1
+      self.dots[i]:SetAlpha(0.18 + 0.82 * (1 - p))
+    end
+  end
+
+  function s:Start() self._t = 0; self:Show(); self:SetScript("OnUpdate", onUpdate) end
+  function s:Stop() self:SetScript("OnUpdate", nil); self:Hide() end
+  s:Hide()
+  return s
+end
+
+-- ---------------------------------------------------------------------------
 -- Section header: cream label + gold diamond + right-fading gold rule, with an
 -- optional descriptive sub-line. Build once; drive each refresh with StyleHeader.
 -- ---------------------------------------------------------------------------

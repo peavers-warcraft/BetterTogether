@@ -53,10 +53,18 @@ local function todayYMD()
 end
 
 -- Resolve display fields from an entry's id (id + date only) through the
--- achievement API on this client.
+-- achievement API on this client. Memoized: an achievement's name/points/desc/icon
+-- never change once earned, and refresh() re-resolves every visible row on each 2s
+-- tick + era switch — caching keeps those repaints from re-hitting the API in bulk.
+local resolveCache = {}
 local function resolve(entry)
-  local _, name, points, _, _, _, _, desc, _, icon = GetAchievementInfo(entry.id)
-  return name or (L["Achievement #"] .. entry.id), points or 0, desc or "", icon
+  local id = entry.id
+  local hit = resolveCache[id]
+  if hit then return hit[1], hit[2], hit[3], hit[4] end
+  local _, name, points, _, _, _, _, desc, _, icon = GetAchievementInfo(id)
+  name, points, desc = name or (L["Achievement #"] .. id), points or 0, desc or ""
+  resolveCache[id] = { name, points, desc, icon }
+  return name, points, desc, icon
 end
 
 -- ---------------------------------------------------------------------------
@@ -279,6 +287,12 @@ local function build(host)
   f.rows = {}
   f.note  = Widgets.SubText(f)   -- featured-area message (shared subheader font)
   f.note2 = Widgets.SubText(f)   -- era-body message
+  -- Centered full-page loading/empty state: gold spinner over a centered message
+  -- (shared with the Quests/Inventory data pages so every wait reads the same).
+  S.attachFullPageState(f)
+  -- Inline loader for the era body while a freshly-selected expansion's partner data
+  -- streams in — keeps the featured cards + era nav on screen so you can keep paging.
+  f.eraSpinner = Widgets.Spinner(f, 34)
   f.prev = makeNavButton(f, "<")
   f.next = makeNavButton(f, ">")
   f.eraLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -301,21 +315,19 @@ local function ensureRow(f, i)
   return f.rows[i]
 end
 
--- A single full-page message under the "Memories together" header (pairing prompt
--- or a loading note). Hides every other widget so the page reads as one clean state.
-local function fullPageNote(f, colW, text, topPad)
-  f.featHeader.label:ClearAllPoints(); f.featHeader.label:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-  Widgets.StyleHeader(f.featHeader, L["Memories together"], colW)
-  local yOff = Theme.HEADER_H
-  f.note:Show(); f.note:ClearAllPoints(); f.note:SetPoint("TOPLEFT", f, "TOPLEFT", 3, -(yOff + topPad))
-  f.note:SetWidth(colW - 6); f.note:SetText(text)
-  f.note2:Hide()
+-- A single clean, centered full-page state: a message (pairing prompt, partner-off
+-- note, or loading text) centered horizontally and vertically in the visible panel,
+-- with an optional gold loading spinner above it. Hides every other widget so the
+-- page reads as one calm state rather than a half-built layout.
+local function fullPageNote(f, colW, text, spinner)
+  Widgets.HideHeader(f.featHeader); Widgets.HideHeader(f.browseHeader)
+  f.note:Hide(); f.note2:Hide()
   f.prev:Hide(); f.next:Hide(); f.eraLabel:Hide()
   for i = 1, #f.cards do f.cards[i]:Hide() end
   for i = 1, #f.subHeaders do Widgets.HideHeader(f.subHeaders[i]) end
   for i = 1, #f.rows do f.rows[i]:SetShown(false) end
-  local h = yOff + topPad + f.note:GetStringHeight() + 14
-  f:SetHeight(h); return h
+  if f.eraSpinner then f.eraSpinner:Stop() end
+  return S.showFullPageState(f, colW, text, spinner)
 end
 
 -- ---------------------------------------------------------------------------
@@ -323,7 +335,9 @@ end
 -- ---------------------------------------------------------------------------
 local function refresh(f, ctx)
   local W = ctx.width; f:SetWidth(W)
-  local colW = math.min(W, 600)
+  -- Fill the whole viewport (this page always runs beside the detail sidebar, which
+  -- already constrains the width) so content meets the divider with no dead gap.
+  local colW = W
 
   -- The "Browse by era" section header was removed by design; the era nav is
   -- centered beneath the list instead. f.browseHeader stays hidden.
@@ -332,23 +346,23 @@ local function refresh(f, ctx)
   -- Not linked: a single prompt — nothing to browse or feature yet.
   if not partnerLinked() then
     return fullPageNote(f, colW,
-      "|cff808080" .. L["Pair with your partner to start collecting the achievements you've earned together."] .. "|r", 10)
+      "|cff808080" .. L["Pair with your partner to compare achievements."] .. "|r")
   end
 
   -- Our own achievements are scanned across frames (the full DB is large), so the
   -- page opens instantly. Show a note while the first scan runs, then repaint — this
-  -- is what keeps clicking "Together" from freezing the client.
+  -- is what keeps clicking the Achievements tab from freezing the client.
   if not ns.AchvSync.Ready() then
     ns.AchvSync.Ensure(function() if ns.Dashboard then ns.Dashboard.Refresh() end end)
     return fullPageNote(f, colW,
-      "|cffd0d0d0" .. L["Gathering your achievements…"] .. "|r\n|cff808080" .. L["This only takes a moment the first time you open it."] .. "|r", 18)
+      "|cffd0d0d0" .. L["Gathering your achievements…"] .. "|r\n|cff808080" .. L["This only takes a moment the first time you open it."] .. "|r", true)
   end
 
   -- Partner has turned off achievement sharing: their list will never arrive, so say
   -- so plainly instead of holding the "gathering…" note forever.
   if not ns.PartnerShares("achievements") then
     return fullPageNote(f, colW,
-      "|cff808080" .. L["Your partner has turned off sharing their achievements."] .. "|r", 18)
+      "|cff808080" .. L["Your partner has turned off sharing their achievements."] .. "|r")
   end
 
   viewEra = viewEra or defaultEra()
@@ -374,8 +388,11 @@ local function refresh(f, ctx)
   -- navigation uses the inline "Syncing…" note instead of blanking the page.
   if not next(ns.state.partner.achv or {}) then
     return fullPageNote(f, colW,
-      "|cffd0d0d0" .. L["Gathering the achievements you've earned together…"] .. "|r\n|cff808080" .. L["This can take a few seconds the first time you open it."] .. "|r", 18)
+      "|cffd0d0d0" .. L["Gathering the achievements you've earned together…"] .. "|r\n|cff808080" .. L["This can take a few seconds the first time you open it."] .. "|r", true)
   end
+
+  -- Real content is about to render: tear down the centered loading state.
+  S.clearFullPageState(f)
 
   -- MEMORIES TOGETHER (top) --------------------------------------------------
   f.featHeader.label:ClearAllPoints(); f.featHeader.label:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
@@ -449,16 +466,24 @@ local function refresh(f, ctx)
   end
 
   if partnerEra(viewEra) == nil then
-    f.note2:Show(); f.note2:ClearAllPoints(); f.note2:SetPoint("TOPLEFT", f, "TOPLEFT", 3, -yOff)
-    f.note2:SetWidth(colW - 6)
+    -- Switching to an expansion we haven't pulled the partner's data for yet: show the
+    -- same gold loader, centered in the era body, above a "Syncing…" line. The era nav
+    -- below stays put, so paging on through the album never blocks.
+    local sp = f.eraSpinner
+    sp:ClearAllPoints(); sp:SetPoint("TOP", f, "TOPLEFT", colW / 2, -yOff); sp:Start()
+    f.note2:Show(); f.note2:ClearAllPoints()
+    f.note2:SetPoint("TOP", sp, "BOTTOM", 0, -12)
+    f.note2:SetWidth(colW); f.note2:SetJustifyH("CENTER")
     f.note2:SetText("|cff808080" .. L["Syncing "] .. ns.AchvSync.EraName(viewEra) .. L[" achievements…"] .. "|r")
-    yOff = yOff + 10 + f.note2:GetStringHeight() + (SEC_GAP - 10)
+    yOff = yOff + 34 + 12 + f.note2:GetStringHeight() + (SEC_GAP - 6)
   else
+    f.eraSpinner:Stop()
     local togCount = #both > TOGETHER_CAP and (TOGETHER_CAP .. L[" of "] .. #both) or tostring(#both)
     section(L["Earned together"] .. "  |cff707070(" .. togCount .. ")|r", both, "both", TOGETHER_CAP)
     section(L["Partner earned"] .. "  |cff707070(" .. #partnerOnly .. ")|r", partnerOnly, "partner")
     if #both == 0 and #partnerOnly == 0 then
-      f.note2:Show(); f.note2:ClearAllPoints(); f.note2:SetPoint("TOPLEFT", f, "TOPLEFT", 3, -yOff)
+      f.note2:Show(); f.note2:ClearAllPoints(); f.note2:SetJustifyH("LEFT")
+      f.note2:SetPoint("TOPLEFT", f, "TOPLEFT", 3, -yOff)
       f.note2:SetWidth(colW - 6)
       f.note2:SetText("|cff808080" .. L["No shared achievements in this era yet."] .. "|r")
       yOff = yOff + 10 + f.note2:GetStringHeight() + (SEC_GAP - 10)
@@ -490,7 +515,7 @@ local function refresh(f, ctx)
 end
 
 ns.Dashboard.RegisterPage({
-  key = "achievements", label = L["Together"], order = 3, detail = true,
+  key = "achievements", label = L["Achievements"], order = 3, detail = true,
   detailTitle = L["Achievement"], detailHint = L["Hover or click an achievement to see it here."],
   build = build, refresh = refresh,
   onShow = function()

@@ -51,16 +51,21 @@ local function getSections(snap)
   -- Checked before any cached data: a partner who turns sharing off stops sending
   -- QLOG but we may still hold their last list, so this must win over stale data.
   if not ns.PartnerShares("questlog") then
-    return { { title = L["Quests"],
-      text = "|cff808080" .. L["Your partner has turned off sharing their quest log."] .. "|r" } }
+    return { fullPage = { text = "|cff808080" .. L["Your partner has turned off sharing their quest log."] .. "|r" } }
+  end
+
+  -- Not paired yet: nothing to compare — a calm prompt rather than a spinner that
+  -- would otherwise spin forever waiting on a partner who'll never arrive.
+  if ns.state.partner == nil then
+    return { fullPage = { text = "|cff808080" .. L["Pair with your partner to compare quests."] .. "|r" } }
   end
 
   local own = (ns.QuestSync and ns.QuestSync.Scan()) or {}
-  local partner = ns.state.partner and ns.state.partner.qlog or nil
+  local partner = ns.state.partner.qlog
 
   if not partner then
-    return { { title = L["Quests"],
-      text = "|cff808080" .. L["Waiting for your partner's quest log… (a request is sent when you open this tab)."] .. "|r" } }
+    return { fullPage = { spinner = true,
+      text = "|cffd0d0d0" .. L["Waiting for your partner's quest log…"] .. "|r\n|cff808080" .. L["A request is sent when you open this tab."] .. "|r" } }
   end
 
   local ownById, partnerById = {}, {}

@@ -231,6 +231,13 @@ local function onPlayerLogin()
   if ns.SelfState and ns.SelfState.Update then ns.SelfState.Update() end
   if ns.Pairing and ns.Pairing.Resume then ns.Pairing.Resume() end
 
+  -- Pre-warm the achievement scan in the background a few seconds after login (once
+  -- the login burst has settled) so the Achievements tab opens to ready data instead of
+  -- kicking off the scan — and its loading delay — on the user's first click.
+  if ns.AchvSync and ns.AchvSync.Ensure and C_Timer and C_Timer.After then
+    C_Timer.After(4, function() ns.AchvSync.Ensure() end)
+  end
+
   ns:Print(ns.L["loaded v"] .. ns.VERSION .. ns.L[". Type |cffffff00/bt|r for options."])
 end
 

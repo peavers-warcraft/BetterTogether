@@ -215,6 +215,66 @@ function S.cSupplies(snap)
 end
 
 -- ---------------------------------------------------------------------------
+-- Centered full-page state (gold loading spinner + a centered message). The shared
+-- "this tab is loading / empty / opted-out" affordance: any data page that has to
+-- wait on synced data renders the same clean, centered state instead of a left-
+-- aligned note. attach() once at build; show() to lay it out (vertically centered in
+-- the scroll viewport, spinner optional); clear() when real content takes over.
+-- ---------------------------------------------------------------------------
+--- Create the spinner + message fontstring on a page frame. Call once in build().
+--- @param f table The page frame (a scroll child).
+function S.attachFullPageState(f)
+  f._fpSpinner = Widgets.Spinner(f, 46)
+  f._fpMsg = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  f._fpMsg:SetJustifyH("CENTER"); f._fpMsg:SetJustifyV("TOP"); f._fpMsg:SetSpacing(5)
+  f._fpMsg:Hide()
+end
+
+--- Lay the centered state out and size the page to fill the viewport so it sits in
+--- the middle of the panel. Pass spinner=true to play the loading spinner above the
+--- message. Returns the page height. Callers hide their own content widgets first.
+--- @param f table Page frame (attached via attachFullPageState).
+--- @param colW number Max message width reference.
+--- @param text string Message (may contain colour escapes / a second \n line).
+--- @param spinner boolean|nil Show the loading spinner.
+--- @return number height
+function S.showFullPageState(f, colW, text, spinner)
+  local host = f:GetParent()
+  local vh = (host and host:GetHeight()) or 0
+  if vh < 160 then vh = 420 end
+
+  f._fpMsg:Show()
+  f._fpMsg:SetWidth(math.min(colW, 460))
+  f._fpMsg:SetText(text)
+  local msgH = f._fpMsg:GetStringHeight()
+
+  if spinner then
+    local SP, GAP = 46, 18
+    local blockH = SP + GAP + msgH
+    f._fpSpinner:ClearAllPoints()
+    f._fpSpinner:SetPoint("TOP", f, "TOP", 0, -math.max(0, (vh - blockH) / 2))
+    f._fpSpinner:Start()
+    f._fpMsg:ClearAllPoints()
+    f._fpMsg:SetPoint("TOP", f._fpSpinner, "BOTTOM", 0, -GAP)
+  else
+    f._fpSpinner:Stop()
+    f._fpMsg:ClearAllPoints()
+    f._fpMsg:SetPoint("TOP", f, "TOP", 0, -math.max(0, (vh - msgH) / 2))
+  end
+
+  f:SetHeight(vh)
+  return vh
+end
+
+--- Tear the centered state down (stop the spinner, hide the message) before real
+--- content renders. Safe to call every refresh.
+--- @param f table Page frame.
+function S.clearFullPageState(f)
+  if f._fpSpinner then f._fpSpinner:Stop() end
+  if f._fpMsg then f._fpMsg:Hide() end
+end
+
+-- ---------------------------------------------------------------------------
 -- Generic vertical "info page" (sections of title + body text). Pools headers
 -- and body fontstrings; getSections(snap) returns { {title=, text=}, ... }.
 -- ---------------------------------------------------------------------------
@@ -271,6 +331,7 @@ function S.makeRowPage(getSections)
     local f = CreateFrame("Frame", nil, host); f:SetSize(10, 10)
     f._headers, f._rows, f._bodies = {}, {}, {}
     f._ff = GameFontHighlight:GetFont()
+    S.attachFullPageState(f)
     return f
   end
 
@@ -285,8 +346,21 @@ function S.makeRowPage(getSections)
 
   local function refresh(f, ctx)
     local W = ctx.width; f:SetWidth(W)
-    local colW = math.min(W, 600)
+    -- Fill the whole viewport (these pages always run beside the detail sidebar, which
+    -- already constrains the width) so content meets the divider with no dead gap.
+    local colW = W
     local secs = getSections(ctx.snap) or {}
+
+    -- A getSections may return a single centered full-page state (loading / empty /
+    -- opted-out) instead of content sections: render the shared spinner + message.
+    if secs.fullPage then
+      for i = 1, #f._headers do Widgets.HideHeader(f._headers[i]) end
+      for i = 1, #f._rows do f._rows[i]:SetShown(false) end
+      for i = 1, #f._bodies do f._bodies[i]:Hide() end
+      return S.showFullPageState(f, colW, secs.fullPage.text, secs.fullPage.spinner)
+    end
+    S.clearFullPageState(f)
+
     local prev, h, hi, ri, bi = nil, 0, 0, 0, 0
 
     for _, sec in ipairs(secs) do

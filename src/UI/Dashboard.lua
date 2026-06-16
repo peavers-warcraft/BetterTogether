@@ -252,6 +252,20 @@ local compact
 -- ---------------------------------------------------------------------------
 -- Item detail renderer (custom, non-tooltip — styled as part of the addon)
 -- ---------------------------------------------------------------------------
+-- Play the detail pane's loading spinner, centered under the header at `y`. Idempotent
+-- so a re-render mid-wait (e.g. GET_ITEM_INFO_RECEIVED) doesn't restart the comet.
+local function startDetailSpinner(y)
+  local sp = panel and panel.detailSpinner
+  if not sp then return end
+  sp:ClearAllPoints()
+  sp:SetPoint("TOP", panel.detailBody, "TOP", 0, y or -64)
+  if not sp:IsShown() then sp:Start() end
+  return sp
+end
+local function stopDetailSpinner()
+  if panel and panel.detailSpinner then panel.detailSpinner:Stop() end
+end
+
 local function renderItemDetail()
   local id = panel._detailID
   if not id then return end
@@ -269,11 +283,14 @@ local function renderItemDetail()
     if qc then qr, qg, qb = qc.r or qr, qc.g or qg, qc.b or qb end
     panel.detailName:SetTextColor(qr, qg, qb)
     panel.detailQChip:Hide(); panel.detailQLabel:Hide()
+    local sp = startDetailSpinner(-66)
     panel.detailText:ClearAllPoints()
-    panel.detailText:SetPoint("TOPLEFT", panel.detailBody, "TOPLEFT", 2, -60)
+    panel.detailText:SetJustifyH("CENTER")
+    if sp then panel.detailText:SetPoint("TOP", sp, "BOTTOM", 0, -14)
+    else panel.detailText:SetPoint("TOPLEFT", panel.detailBody, "TOPLEFT", 2, -60) end
     panel.detailText:SetText(Theme.C.muted2 .. L["Loading partner's item details…"] .. "|r")
     panel.detailText:Show()
-    panel.detailBody:SetHeight(90)
+    panel.detailBody:SetHeight(150)
     if panel.detailScroll then panel.detailScroll:SetVerticalScroll(0); panel.detailScroll:UpdateScrollChildRect() end
     return
   end
@@ -290,10 +307,13 @@ local function renderItemDetail()
     if numId and C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(numId) end
     panel.detailName:SetText(Theme.C.muted2 .. L["Loading…"] .. "|r")
     panel.detailText:Hide(); panel.detailQChip:Hide(); panel.detailQLabel:Hide()
-    panel.detailBody:SetHeight(60); if panel.detailScroll then panel.detailScroll:UpdateScrollChildRect() end
+    startDetailSpinner(-58)
+    panel.detailBody:SetHeight(110); if panel.detailScroll then panel.detailScroll:UpdateScrollChildRect() end
     return
   end
 
+  stopDetailSpinner()
+  panel.detailText:SetJustifyH("LEFT")
   local function surface(t) if TooltipUtil and TooltipUtil.SurfaceArgs then TooltipUtil.SurfaceArgs(t) end end
   surface(data)
   local l1 = data.lines[1]; surface(l1)
@@ -358,6 +378,8 @@ end
 local function renderQuestDetail()
   local q = panel._detailQuest
   if not q then return end
+  stopDetailSpinner()
+  panel.detailText:SetJustifyH("LEFT")
   panel.detailHint:Hide()
   Theme.ApplyIcon(panel.detailChip.icon, Theme.I_QUEST)
   panel.detailChip:Show()
@@ -413,6 +435,8 @@ end
 local function renderAchvDetail()
   local a = panel._detailAchv
   if not a then return end
+  stopDetailSpinner()
+  panel.detailText:SetJustifyH("LEFT")
   panel.detailHint:Hide()
   panel.detailChip.icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
   panel.detailChip.icon:SetTexture(a.icon or 134400)
@@ -598,6 +622,10 @@ function Dashboard.Init()
   local dff = GameFontHighlight:GetFont(); if dff then dt:SetFont(dff, 13) end
   dt:Hide(); panel.detailText = dt
 
+  -- Loading spinner for the detail pane: shown while we wait on the partner's full
+  -- item string (the on-demand inventory lookup) or on the base item data load.
+  local dspin = Widgets.Spinner(body, 36); panel.detailSpinner = dspin
+
   -- crafting-quality shown as one of our chips
   local qchip = Widgets.Chip(body, 30); qchip:Hide(); panel.detailQChip = qchip
   local qlbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -719,6 +747,7 @@ function Dashboard.ClearDetail()
   panel._detailQuest = nil
   panel._detailAchv = nil
   panel._detailPending = nil
+  stopDetailSpinner()
   if panel.detailChip then panel.detailChip:Hide() end
   if panel.detailQChip then panel.detailQChip:Hide() end
   if panel.detailQLabel then panel.detailQLabel:Hide() end

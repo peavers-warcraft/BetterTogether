@@ -70,7 +70,10 @@ end
 -- thousands of entries, so the scan is spread across frames: `onWork` (if given)
 -- is called every ACHV_BATCH achievements, letting an async driver yield. Pass
 -- nil for a blocking scan. Entry: { id, y, m, d }.
-local ACHV_BATCH = 200
+-- Kept modest so each pumped frame does little work: the scan is normally pre-warmed
+-- in the background shortly after login (Core), so a slightly longer wall-clock scan
+-- is invisible — what matters is that no single frame hitches.
+local ACHV_BATCH = 100
 local function sweep(onWork)
   local byEra, seen = {}, {}
   if not (GetCategoryList and GetCategoryNumAchievements and GetAchievementInfo) then return byEra end

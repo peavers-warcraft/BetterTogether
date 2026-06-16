@@ -4,8 +4,9 @@
   consult ns.Shares(key) before emitting a field, so an unticked item simply never
   leaves this client. Flags default to true (share), preserving prior behaviour.
 
-  Layout: a short intro + "Share all / nothing" buttons, then the toggles laid out
-  in three columns (Readiness / Character / History & data).
+  Layout: a short intro + "Share all / nothing" buttons, then the toggles in a
+  single vertical list of sections (Readiness / Character / History & data). The
+  Dashboard host is a ScrollFrame, so the list scrolls when it overflows.
 ]]
 
 local addonName, ns = ...
@@ -14,7 +15,8 @@ local Widgets = ns.UI.Widgets
 local L = ns.L
 
 local CHECK_H = 28       -- vertical pitch between checkboxes
-local COL_GAP = 36       -- gap between the three columns
+local SEC_GAP = 16       -- gap between section groups
+local LABEL_GAP = 8      -- space between a checkbox and its label
 
 -- Toggle groups. Each key matches a privacy flag in DB_DEFAULTS.privacy and is
 -- read back by ns.Shares() in the encoders. Grouped wire fields (identity, gear,
@@ -83,6 +85,8 @@ local function makeCheck(parent, key, label)
   local cb = CreateFrame("CheckButton", nil, parent, "InterfaceOptionsCheckButtonTemplate")
   cb.privKey = key
   cb.Text:SetText(label)
+  cb.Text:ClearAllPoints()
+  cb.Text:SetPoint("LEFT", cb, "RIGHT", LABEL_GAP, 0)
   cb.Text:SetTextColor(Theme.CREAM[1], Theme.CREAM[2], Theme.CREAM[3])
   local ff = GameFontHighlight:GetFont()
   if ff then cb.Text:SetFont(ff, Theme.FONT_SMALL, "") end
@@ -128,32 +132,28 @@ local function refresh(f, ctx)
   f.allBtn:ClearAllPoints(); f.allBtn:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -(introH + 12))
   f.noneBtn:ClearAllPoints(); f.noneBtn:SetPoint("LEFT", f.allBtn, "RIGHT", 10, 0)
 
-  -- Everything below the intro + action buttons starts here.
-  local topH = introH + 12 + 24 + 22
+  -- Everything below the intro + action buttons starts here, stacked top-to-bottom
+  -- in a single column. The Dashboard host scrolls when the list runs long.
+  local y = introH + 12 + 24 + 22
 
-  local cols = #f.groups
-  local colW = math.max(180, (W - COL_GAP * (cols - 1)) / cols)
-
-  local maxColH = topH
   for gi, grp in ipairs(f.groups) do
-    local x = (gi - 1) * (colW + COL_GAP)
+    if gi > 1 then y = y + SEC_GAP end
     local hd = grp.header
     hd.label:ClearAllPoints()
-    hd.label:SetPoint("TOPLEFT", f, "TOPLEFT", x, -topH)
-    Widgets.StyleHeader(hd, GROUPS[gi].title, colW)
+    hd.label:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
+    Widgets.StyleHeader(hd, GROUPS[gi].title, W)
 
-    local y = topH + Theme.HEADER_H
+    y = y + Theme.HEADER_H
     for _, cb in ipairs(grp.checks) do
       cb:ClearAllPoints()
-      cb:SetPoint("TOPLEFT", f, "TOPLEFT", x, -y)
+      cb:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -y)
       cb:SetChecked(ns.db.privacy[cb.privKey] ~= false)
       y = y + CHECK_H
     end
-    if y > maxColH then maxColH = y end
   end
 
-  f:SetHeight(maxColH + 10)
-  return maxColH + 10
+  f:SetHeight(y + 10)
+  return y + 10
 end
 
 ns.Dashboard.RegisterPage({ key = "privacy", label = L["Privacy"], order = 9, separator = true, build = build, refresh = refresh })

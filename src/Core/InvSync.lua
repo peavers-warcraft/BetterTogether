@@ -91,6 +91,9 @@ function InvSync.StoreItemDetail(id, str)
   id = tonumber(id)
   if not id or not str or str == "" then return end
   InvSync.detailCache[id] = str
+  -- Free the Inventory page's single-in-flight detail gate so it can chase the next
+  -- item the user has hovered (set by the page; absent until the tab is built).
+  if InvSync.onDetailResolved then InvSync.onDetailResolved(id) end
   if ns.Dashboard and ns.Dashboard.OnItemDetailArrived then
     ns.Dashboard.OnItemDetailArrived(id, str)
   end
