@@ -324,6 +324,19 @@ Comm.SoftUnlink = softUnlink
 -- ---------------------------------------------------------------------------
 -- Inbound dispatch
 -- ---------------------------------------------------------------------------
+-- Strip and validate the leading wire-protocol version token (the `<version>|`
+-- prefix on SNAP/CARD/STATS bodies). Returns the remaining payload, or nil if
+-- the partner speaks an incompatible protocol — decoding a foreign format could
+-- corrupt ns.state.partner, so we skip it and leave a debug breadcrumb.
+local function stripProto(rest)
+  local ver, payload = rest:match("^(%d+)|(.*)$")
+  if tonumber(ver) ~= ns.PROTO then
+    ns:Debug("ignoring message: proto " .. tostring(ver) .. " ~= " .. ns.PROTO)
+    return nil
+  end
+  return payload
+end
+
 -- trusted=true bypasses the bond gate (used by loopback Inject).
 local function dispatch(text, senderShort, trusted)
   local mtype, rest = text:match("^([A-Z]+)|?(.*)$")
@@ -354,8 +367,8 @@ local function dispatch(text, senderShort, trusted)
     Comm.QueueStats(true)
 
   elseif mtype == MSG.SNAP then
-    local _, payload = rest:match("^(%d+)|(.*)$")
-    local snap = ns.Snapshot.Decode(payload)
+    local payload = stripProto(rest)
+    local snap = payload and ns.Snapshot.Decode(payload)
     if snap then
       ns.state.partner = ns.state.partner or {}
       for k, v in pairs(snap) do ns.state.partner[k] = v end
@@ -364,8 +377,8 @@ local function dispatch(text, senderShort, trusted)
     end
 
   elseif mtype == MSG.CARD then
-    local _, payload = rest:match("^(%d+)|(.*)$")
-    local card = ns.Snapshot.DecodeCard(payload)
+    local payload = stripProto(rest)
+    local card = payload and ns.Snapshot.DecodeCard(payload)
     if card then
       ns.state.partner = ns.state.partner or {}
       for k, v in pairs(card) do ns.state.partner[k] = v end
@@ -380,8 +393,8 @@ local function dispatch(text, senderShort, trusted)
     Comm.QueueStats(true)
 
   elseif mtype == MSG.STATS then
-    local _, payload = rest:match("^(%d+)|(.*)$")
-    local st = ns.Snapshot.DecodeStats(payload)
+    local payload = stripProto(rest)
+    local st = payload and ns.Snapshot.DecodeStats(payload)
     if st and ns.SharedStats then
       markLinked()
       ns.SharedStats.MergePartner(st)

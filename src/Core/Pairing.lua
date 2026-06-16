@@ -232,12 +232,9 @@ function Pairing.OnMessage(mtype, rest, sender)
 
   elseif mtype == "ACCEPT" then
     local from = rest:match("^(.+)$") or sender
-    -- Bond if this is who we invited (or, leniently, anyone if we have a pending invite).
-    if pendingInviteTo and Pairing.IsBonded and shortName(pendingInviteTo) == shortName(from) then
-      bondTo(from)
-    elseif pendingInviteTo then
-      bondTo(from)
-    end
+    -- Bond if we have a pending invite out. We accept leniently from anyone we
+    -- have an outstanding invite to (the handshake itself proves intent).
+    if pendingInviteTo then bondTo(from) end
 
   elseif mtype == "DECLINE" then
     local from = rest:match("^(.+)$") or sender

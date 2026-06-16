@@ -188,9 +188,12 @@ function Snapshot.EncodeStats()
     "dungeons=" .. (s.dungeons or 0),
     "mplus="    .. (s.mplus or 0),
     "tt="       .. math.floor(s.togetherTime or 0),
+    "wipes="    .. (s.wipes or 0),
     "quests="   .. (s.quests or 0),
     "deaths="   .. (s.deaths or 0),
     "mobs="     .. (s.mobs or 0),
+    "achv="     .. (s.achievements or 0),
+    "levels="   .. (s.levels or 0),
   }
   return table.concat(parts, "|")
 end
@@ -207,7 +210,9 @@ function Snapshot.DecodeStats(payload)
   local function num(key) return tonumber(kv[key]) or 0 end
   return {
     bosses = num("bosses"), dungeons = num("dungeons"), mplus = num("mplus"),
-    togetherTime = num("tt"), quests = num("quests"), deaths = num("deaths"), mobs = num("mobs"),
+    togetherTime = num("tt"), wipes = num("wipes"),
+    quests = num("quests"), deaths = num("deaths"), mobs = num("mobs"),
+    achievements = num("achv"), levels = num("levels"),
   }
 end
 
