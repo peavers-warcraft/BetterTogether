@@ -102,14 +102,16 @@ function InvSync.ClearDetailCache()
 end
 
 -- Resend (debounced) when our bags change AND the partner is currently viewing.
+local RESEND_DELAY = 3   -- seconds to coalesce a burst of bag updates into one send
 local pending = false
-ns:RegisterEvent("BAG_UPDATE_DELAYED", function()
+local function onBagUpdate()
   if not InvSync.partnerWantsInv or pending then return end
   pending = true
-  C_Timer.After(3, function()
+  C_Timer.After(RESEND_DELAY, function()
     pending = false
     if ns.Comm and ns.Comm.SendInventory then ns.Comm.SendInventory() end
   end)
-end)
+end
+ns:RegisterEvent("BAG_UPDATE_DELAYED", onBagUpdate)
 
 return InvSync

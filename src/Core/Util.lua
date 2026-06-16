@@ -46,4 +46,17 @@ function Util.IsSelf(name)
   return name ~= nil and Util.ShortName(name) == UnitName("player")
 end
 
+--- Truncate `s` to at most `n` characters, appending an ellipsis when shortened.
+--- Byte-length based, which is fine for the short labels we put on the wire and
+--- keeps every truncation in the addon (SNAP qname, CARD key/zone, quest titles)
+--- consistent instead of re-implementing the same sub+ellipsis per call site.
+--- @param s string|nil The text (nil becomes "").
+--- @param n number Max length before truncation.
+--- @return string
+function Util.Truncate(s, n)
+  s = s or ""
+  if #s > n then return s:sub(1, n - 1) .. "…" end
+  return s
+end
+
 return Util

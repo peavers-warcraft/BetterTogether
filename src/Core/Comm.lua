@@ -128,10 +128,23 @@ local lastSnapAt, snapPending = 0, false
 local lastCardAt, cardPending = 0, false
 local lastStatsAt, statsPending = 0, false
 local lastSnapSig, lastCardSig, lastStatsSig = nil, nil, nil
-local invBuf  -- inbound INV chunk reassembly buffer
-local qlogBuf -- inbound QLOG chunk reassembly buffer
-local achvBuf    -- inbound ACHV chunk reassembly buffer (keyed by era)
-local achvDigBuf -- inbound ACHVDIG chunk reassembly buffer
+-- Inbound chunk reassembly. Each chunked message type accumulates its parts in
+-- buffers[key] until all `total` of them arrive, then fires onComplete(fullPayload)
+-- and refreshes the dashboard. ACHV passes a per-era key so two eras streaming at
+-- once never collide. Replaces the four hand-rolled invBuf/qlogBuf/... loops.
+local buffers = {}
+local function reassemble(key, i, total, chunk, onComplete)
+  local buf = buffers[key] or {}
+  buffers[key] = buf
+  buf[i] = chunk or ""
+  local have = 0
+  for k = 1, total do if buf[k] ~= nil then have = have + 1 end end
+  if have == total then
+    buffers[key] = nil
+    onComplete(table.concat(buf, "", 1, total))
+    if ns.Dashboard then ns.Dashboard.Refresh() end
+  end
+end
 
 local function doSendSnapshot()
   snapPending = false
@@ -225,6 +238,19 @@ function Comm.SendBye()
   rawSend({ text = MSG.BYE, target = partnerTarget() })
 end
 
+-- Send `payload` as INV_CHUNK-sized parts, each framed as
+--   <msgType>|[<prefix>|]<i>/<n>|<chunk>
+-- `prefix` (optional) is inserted before the chunk counter — ACHV uses it for the
+-- era token. `label` only tags the debug line. Mirrors reassemble() on the receiver.
+local function sendChunked(msgType, payload, label, prefix)
+  local n = math.max(1, math.ceil(#payload / INV_CHUNK))
+  local pre = prefix and (prefix .. "|") or ""
+  for i = 1, n do
+    send(msgType .. "|" .. pre .. i .. "/" .. n .. "|" .. payload:sub((i - 1) * INV_CHUNK + 1, i * INV_CHUNK))
+  end
+  ns:Debug((label or msgType) .. " sent (" .. #payload .. " chars, " .. n .. " chunk(s))")
+end
+
 -- Inventory: request the partner's bags / send our own (chunked).
 function Comm.RequestInventory()
   send(MSG.INVREQ)
@@ -232,12 +258,7 @@ end
 function Comm.SendInventory()
   if not (ns.InvSync) then return end
   if not partnerTarget() and not Comm.selftest then return end
-  local payload = ns.InvSync.Encode()
-  local n = math.max(1, math.ceil(#payload / INV_CHUNK))
-  for i = 1, n do
-    send(MSG.INV .. "|" .. i .. "/" .. n .. "|" .. payload:sub((i - 1) * INV_CHUNK + 1, i * INV_CHUNK))
-  end
-  ns:Debug("INV sent (" .. #payload .. " chars, " .. n .. " chunk(s))")
+  sendChunked(MSG.INV, ns.InvSync.Encode(), "INV")
 end
 
 -- On-demand item detail: the bulk INV feed is itemID-only, so the hover detail
@@ -259,12 +280,7 @@ end
 function Comm.SendQuests()
   if not (ns.QuestSync) then return end
   if not partnerTarget() and not Comm.selftest then return end
-  local payload = ns.QuestSync.Encode()
-  local n = math.max(1, math.ceil(#payload / INV_CHUNK))
-  for i = 1, n do
-    send(MSG.QLOG .. "|" .. i .. "/" .. n .. "|" .. payload:sub((i - 1) * INV_CHUNK + 1, i * INV_CHUNK))
-  end
-  ns:Debug("QLOG sent (" .. #payload .. " chars, " .. n .. " chunk(s))")
+  sendChunked(MSG.QLOG, ns.QuestSync.Encode(), "QLOG")
 end
 
 -- Achievements: a tiny per-era digest (counts + earliest date), then one era's
@@ -278,12 +294,7 @@ function Comm.SendAchvDigest()
   if not partnerTarget() and not Comm.selftest then return end
   -- Wait for the (async) achievement scan so we never block the frame encoding it.
   ns.AchvSync.Ensure(function()
-    local payload = ns.AchvSync.EncodeDigest()
-    local n = math.max(1, math.ceil(#payload / INV_CHUNK))
-    for i = 1, n do
-      send(MSG.ACHVDIG .. "|" .. i .. "/" .. n .. "|" .. payload:sub((i - 1) * INV_CHUNK + 1, i * INV_CHUNK))
-    end
-    ns:Debug("ACHVDIG sent (" .. #payload .. " chars, " .. n .. " chunk(s))")
+    sendChunked(MSG.ACHVDIG, ns.AchvSync.EncodeDigest(), "ACHVDIG")
   end)
 end
 function Comm.RequestAchvEra(era)
@@ -294,12 +305,7 @@ function Comm.SendAchvEra(era)
   if not partnerTarget() and not Comm.selftest then return end
   era = tonumber(era); if not era then return end
   ns.AchvSync.Ensure(function()
-    local payload = ns.AchvSync.EncodeEra(era)
-    local n = math.max(1, math.ceil(#payload / INV_CHUNK))
-    for i = 1, n do
-      send(MSG.ACHV .. "|" .. era .. "|" .. i .. "/" .. n .. "|" .. payload:sub((i - 1) * INV_CHUNK + 1, i * INV_CHUNK))
-    end
-    ns:Debug("ACHV era " .. era .. " sent (" .. #payload .. " chars, " .. n .. " chunk(s))")
+    sendChunked(MSG.ACHV, ns.AchvSync.EncodeEra(era), "ACHV era " .. era, era)
   end)
 end
 
@@ -410,19 +416,12 @@ local function dispatch(text, senderShort, trusted)
     i, total = tonumber(i), tonumber(total)
     if i and total then
       markLinked()
-      invBuf = invBuf or {}
-      invBuf[i] = chunk or ""
-      local have = 0
-      for k = 1, total do if invBuf[k] ~= nil then have = have + 1 end end
-      if have == total then
-        local full = table.concat(invBuf, "", 1, total)
-        invBuf = nil
+      reassemble(MSG.INV, i, total, chunk, function(full)
         if ns.InvSync then
           ns.InvSync.ClearDetailCache()   -- fresh feed: drop stale on-demand strings
           ns.InvSync.Decode(full)
         end
-        if ns.Dashboard then ns.Dashboard.Refresh() end
-      end
+      end)
     end
 
   elseif mtype == MSG.INVITEMREQ then
@@ -443,16 +442,9 @@ local function dispatch(text, senderShort, trusted)
     i, total = tonumber(i), tonumber(total)
     if i and total then
       markLinked()
-      qlogBuf = qlogBuf or {}
-      qlogBuf[i] = chunk or ""
-      local have = 0
-      for k = 1, total do if qlogBuf[k] ~= nil then have = have + 1 end end
-      if have == total then
-        local full = table.concat(qlogBuf, "", 1, total)
-        qlogBuf = nil
+      reassemble(MSG.QLOG, i, total, chunk, function(full)
         if ns.QuestSync then ns.QuestSync.Decode(full) end
-        if ns.Dashboard then ns.Dashboard.Refresh() end
-      end
+      end)
     end
 
   elseif mtype == MSG.ACHVDIGREQ then
@@ -464,16 +456,9 @@ local function dispatch(text, senderShort, trusted)
     i, total = tonumber(i), tonumber(total)
     if i and total then
       markLinked()
-      achvDigBuf = achvDigBuf or {}
-      achvDigBuf[i] = chunk or ""
-      local have = 0
-      for k = 1, total do if achvDigBuf[k] ~= nil then have = have + 1 end end
-      if have == total then
-        local full = table.concat(achvDigBuf, "", 1, total)
-        achvDigBuf = nil
+      reassemble(MSG.ACHVDIG, i, total, chunk, function(full)
         if ns.AchvSync then ns.AchvSync.DecodeDigest(full) end
-        if ns.Dashboard then ns.Dashboard.Refresh() end
-      end
+      end)
     end
 
   elseif mtype == MSG.ACHVREQ then
@@ -485,17 +470,9 @@ local function dispatch(text, senderShort, trusted)
     i, total = tonumber(i), tonumber(total)
     if era and i and total then
       markLinked()
-      achvBuf = achvBuf or {}
-      achvBuf[era] = achvBuf[era] or {}
-      achvBuf[era][i] = chunk or ""
-      local have = 0
-      for k = 1, total do if achvBuf[era][k] ~= nil then have = have + 1 end end
-      if have == total then
-        local full = table.concat(achvBuf[era], "", 1, total)
-        achvBuf[era] = nil
+      reassemble(MSG.ACHV .. ":" .. era, i, total, chunk, function(full)
         if ns.AchvSync then ns.AchvSync.DecodeEra(tonumber(era), full) end
-        if ns.Dashboard then ns.Dashboard.Refresh() end
-      end
+      end)
     end
 
   elseif mtype == MSG.BYE then

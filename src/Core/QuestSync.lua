@@ -65,14 +65,16 @@ function QuestSync.Decode(str)
 end
 
 -- Resend (debounced) when our quest log changes AND the partner is viewing.
+local RESEND_DELAY = 3   -- seconds to coalesce a burst of quest-log updates into one send
 local pending = false
-ns:RegisterEvent("QUEST_LOG_UPDATE", function()
+local function onQuestLogUpdate()
   if not QuestSync.partnerWantsQuests or pending then return end
   pending = true
-  C_Timer.After(3, function()
+  C_Timer.After(RESEND_DELAY, function()
     pending = false
     if ns.Comm and ns.Comm.SendQuests then ns.Comm.SendQuests() end
   end)
-end)
+end
+ns:RegisterEvent("QUEST_LOG_UPDATE", onQuestLogUpdate)
 
 return QuestSync

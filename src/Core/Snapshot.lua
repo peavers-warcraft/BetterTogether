@@ -16,16 +16,28 @@ ns.Snapshot = Snapshot
 
 local function b(v) return v and "1" or "0" end
 
+-- Split a pipe-delimited "k=v|k=v|..." body into a key->value table. Returns nil
+-- for a nil/empty payload so every decoder can bail with one guard instead of
+-- re-implementing the same parse loop and empty check.
+local function parseKV(payload)
+  if not payload or payload == "" then return nil end
+  local kv = {}
+  for field in payload:gmatch("[^|]+") do
+    local k, v = field:match("^(%w+)=(.*)$")
+    if k then kv[k] = v end
+  end
+  return kv
+end
+
 -- ---------------------------------------------------------------------------
 -- Encode DuoReady.self -> payload string (the part after "SNAP|<proto>|").
 -- ---------------------------------------------------------------------------
 --- @return string payload Pipe-delimited SNAP body (kept under the chunk threshold).
 function Snapshot.Encode()
   local s = ns.state.self
-  -- qname must not contain our delimiters; strip pipes/carets defensively.
-  local qname = (s.qname or ""):gsub("[|^]", " ")
-  -- Truncate qname so the total stays under the 240-char chunk threshold.
-  if #qname > 40 then qname = qname:sub(1, 39) .. "…" end
+  -- qname must not contain our delimiters; strip pipes/carets defensively, then
+  -- truncate so the total stays under the 240-char chunk threshold.
+  local qname = ns.Util.Truncate((s.qname or ""):gsub("[|^]", " "), 40)
 
   local parts = {
     "dur="   .. (s.dur or 100),
@@ -50,13 +62,8 @@ end
 --- @param payload string|nil The SNAP body (everything after "SNAP|<proto>|").
 --- @return table|nil snap Decoded partner readiness, or nil if the payload was empty.
 function Snapshot.Decode(payload)
-  if not payload or payload == "" then return nil end
-
-  local kv = {}
-  for field in payload:gmatch("[^|]+") do
-    local k, v = field:match("^(%w+)=(.*)$")
-    if k then kv[k] = v end
-  end
+  local kv = parseKV(payload)
+  if not kv then return nil end
 
   local function num(key, default)
     return tonumber(kv[key]) or default
@@ -109,8 +116,7 @@ function Snapshot.EncodeCard()
   local s = ns.state.self
   local function clean(str, n)
     str = (str or ""):gsub("[|^]", " ")
-    if n and #str > n then str = str:sub(1, n - 1) .. "…" end
-    return str
+    return n and ns.Util.Truncate(str, n) or str
   end
   local parts = {
     "cls="    .. (s.cls or ""),
@@ -139,12 +145,8 @@ end
 --- @param payload string|nil The CARD body.
 --- @return table|nil card Decoded identity/location/M+/gear card, or nil.
 function Snapshot.DecodeCard(payload)
-  if not payload or payload == "" then return nil end
-  local kv = {}
-  for field in payload:gmatch("[^|]+") do
-    local k, v = field:match("^(%w+)=(.*)$")
-    if k then kv[k] = v end
-  end
+  local kv = parseKV(payload)
+  if not kv then return nil end
   local function num(key, default) return tonumber(kv[key]) or default end
 
   local vr, vm, vw = 0, 0, 0
@@ -201,12 +203,8 @@ end
 --- @param payload string|nil The STATS body.
 --- @return table|nil stats Decoded duo counters, or nil.
 function Snapshot.DecodeStats(payload)
-  if not payload or payload == "" then return nil end
-  local kv = {}
-  for field in payload:gmatch("[^|]+") do
-    local k, v = field:match("^(%w+)=(.*)$")
-    if k then kv[k] = v end
-  end
+  local kv = parseKV(payload)
+  if not kv then return nil end
   local function num(key) return tonumber(kv[key]) or 0 end
   return {
     bosses = num("bosses"), dungeons = num("dungeons"), mplus = num("mplus"),

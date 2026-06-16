@@ -80,11 +80,7 @@ end
 -- ---------------------------------------------------------------------------
 -- Quest
 -- ---------------------------------------------------------------------------
-local function truncate(s, n)
-  if not s then return "" end
-  if #s <= n then return s end
-  return s:sub(1, n - 1) .. "…"
-end
+local truncate = ns.Util.Truncate
 
 local function readQuest()
   local qid = ns.db and ns.db.pinnedQuestID

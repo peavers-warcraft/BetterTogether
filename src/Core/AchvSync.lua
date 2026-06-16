@@ -124,7 +124,7 @@ function AchvSync.Ensure(onReady)
   scanTicker = C_Timer.NewTicker(0, function()
     local ok, ret = coroutine.resume(scanCo)
     if not ok then
-      if ns.Debug then ns:Debug("AchvSync scan error: " .. tostring(ret)) end
+      ns:Debug("AchvSync scan error: " .. tostring(ret))
       cache = {}
     elseif coroutine.status(scanCo) ~= "dead" then
       return                                            -- still scanning; resume next frame
@@ -204,6 +204,7 @@ function AchvSync.DecodeDigest(str)
 end
 
 -- A freshly earned achievement invalidates the cache so the next sync includes it.
-ns:RegisterEvent("ACHIEVEMENT_EARNED", function() AchvSync.Invalidate() end)
+local function onAchievementEarned() AchvSync.Invalidate() end
+ns:RegisterEvent("ACHIEVEMENT_EARNED", onAchievementEarned)
 
 return AchvSync
