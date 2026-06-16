@@ -11,6 +11,9 @@
 
 local addonName, ns = ...
 local S = ns.UI.Shared
+local Theme = ns.UI.Theme
+local Widgets = ns.UI.Widgets
+local L = ns.L
 
 local COL_W   = 560          -- max content column width
 local CARD_H  = 72
@@ -23,34 +26,6 @@ local HEAD_PAD = 10          -- top padding between a section header's rule and 
 -- requires the 3rd arg (else "bad argument #3 to 'SetFont'").
 local FONT = GameFontHighlight:GetFont()
 local function setFont(obj, size) if FONT then obj:SetFont(FONT, size, "") end end
-
--- Dark-gold button matching the dashboard theme (replaces stock UIPanelButton).
-local function makeButton(parent, text, w, h)
-  local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
-  b:SetSize(w, h)
-  b:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12,
-    insets = { left = 3, right = 3, top = 3, bottom = 3 } })
-  b:SetBackdropColor(0.12, 0.10, 0.05, 0.9)
-  b:SetBackdropBorderColor(S.GOLD[1], S.GOLD[2], S.GOLD[3], 0.75)
-
-  local fs = b:CreateFontString(nil, "OVERLAY")
-  fs:SetPoint("CENTER", 0, 0); setFont(fs, 14)
-  fs:SetTextColor(S.CREAM[1], S.CREAM[2], S.CREAM[3]); fs:SetText(text)
-  b.fs = fs
-
-  b:SetScript("OnEnter", function(self)
-    self:SetBackdropColor(0.20, 0.16, 0.07, 0.95)
-    self:SetBackdropBorderColor(S.GOLD[1], S.GOLD[2], S.GOLD[3], 1)
-  end)
-  b:SetScript("OnLeave", function(self)
-    self:SetBackdropColor(0.12, 0.10, 0.05, 0.9)
-    self:SetBackdropBorderColor(S.GOLD[1], S.GOLD[2], S.GOLD[3], 0.75)
-  end)
-  b:SetScript("OnMouseDown", function(self) self.fs:SetPoint("CENTER", 1, -1) end)
-  b:SetScript("OnMouseUp", function(self) self.fs:SetPoint("CENTER", 0, 0) end)
-  return b
-end
 
 -- Wire Blizzard's player-name autocomplete onto an EditBox — the same dropdown
 -- the whisper / Add-Friend fields use, so typing "Am" suggests "Amy-Spirestone"
@@ -79,25 +54,6 @@ local function enableNameAutocomplete(box)
   return true
 end
 
--- Dark input field matching the theme (replaces stock InputBoxTemplate).
-local function makeInput(parent, w, h)
-  local e = CreateFrame("EditBox", nil, parent, "BackdropTemplate")
-  e:SetSize(w, h)
-  e:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12,
-    insets = { left = 3, right = 3, top = 3, bottom = 3 } })
-  e:SetBackdropColor(0.03, 0.03, 0.04, 0.9)
-  e:SetBackdropBorderColor(S.GOLD[1] * 0.7, S.GOLD[2] * 0.7, S.GOLD[3] * 0.7, 0.7)
-  e:SetFont(FONT, 14, "")
-  e:SetTextColor(S.CREAM[1], S.CREAM[2], S.CREAM[3])
-  e:SetTextInsets(8, 8, 0, 0)
-  e:SetAutoFocus(false)
-  -- brighten the border while focused
-  e:SetScript("OnEditFocusGained", function(self) self:SetBackdropBorderColor(S.GOLD[1], S.GOLD[2], S.GOLD[3], 1) end)
-  e:HookScript("OnEditFocusLost", function(self) self:SetBackdropBorderColor(S.GOLD[1] * 0.7, S.GOLD[2] * 0.7, S.GOLD[3] * 0.7, 0.7) end)
-  return e
-end
-
 -- ---------------------------------------------------------------------------
 -- Active-partner hero card
 -- ---------------------------------------------------------------------------
@@ -107,7 +63,7 @@ local function makeHero(parent)
   -- Border only — the `grad` texture below provides the fill, so we don't get a
   -- solid-white backdrop bg sitting on top of it.
   card:SetBackdrop({ edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12 })
-  card:SetBackdropBorderColor(S.GOLD[1] * 0.7, S.GOLD[2] * 0.7, S.GOLD[3] * 0.7, 0.85)
+  card:SetBackdropBorderColor(Theme.GOLD[1] * 0.7, Theme.GOLD[2] * 0.7, Theme.GOLD[3] * 0.7, 0.85)
 
   local grad = card:CreateTexture(nil, "BACKGROUND")
   grad:SetPoint("TOPLEFT", 4, -4); grad:SetPoint("BOTTOMRIGHT", -4, 4)
@@ -140,7 +96,7 @@ local function makeHero(parent)
   meta:SetTextColor(0.86, 0.82, 0.70)
   card.meta = meta
 
-  local unpair = makeButton(card, "Unpair", 76, 22)
+  local unpair = Widgets.Button(card, L["Unpair"], 76, 22)
   unpair:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -14, 10)
   card.unpair = unpair
 
@@ -158,8 +114,8 @@ local function refreshHero(card, active, short)
     card.accent:SetColorTexture(0.4, 0.4, 0.4, 0.6)
     card.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
     card.icon:SetDesaturated(true)
-    card.name:SetText("|cff9a9a9aNo active partner|r")
-    card.status:SetText("|cff808080Pick one below, or invite someone to get started.|r")
+    card.name:SetText("|cff9a9a9a" .. L["No active partner"] .. "|r")
+    card.status:SetText("|cff808080" .. L["Pick one below, or invite someone to get started."] .. "|r")
     card.meta:SetText("")
     card.unpair:Hide()
     return
@@ -181,16 +137,16 @@ local function refreshHero(card, active, short)
     if CreateColor then
       card.grad:SetGradient("VERTICAL", CreateColor(0.06, 0.06, 0.04, 0.85), CreateColor(0.20, 0.16, 0.06, 0.55))
     else card.grad:SetColorTexture(0.16, 0.13, 0.06, 0.7) end
-    card.accent:SetColorTexture(S.GOLD[1], S.GOLD[2], S.GOLD[3], 0.9)
+    card.accent:SetColorTexture(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3], 0.9)
   end
 
   -- class icon
   card.icon:SetDesaturated(false)
   local atlas = cls and ("classicon-" .. strlower(cls))
-  if atlas and S.atlasExists(atlas) then
+  if atlas and Theme.AtlasExists(atlas) then
     card.icon:SetAtlas(atlas)
   elseif cls and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[cls] then
-    card.icon:SetTexture(S.CLASS_CIRCLES); card.icon:SetTexCoord(unpack(CLASS_ICON_TCOORDS[cls]))
+    card.icon:SetTexture(Theme.CLASS_CIRCLES); card.icon:SetTexCoord(unpack(CLASS_ICON_TCOORDS[cls]))
   else
     card.icon:SetTexture("Interface\\Icons\\Achievement_Reputation_08"); card.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
   end
@@ -200,10 +156,10 @@ local function refreshHero(card, active, short)
   -- status line
   if linked then
     local ago = (p and p.lastSeen) and (GetTime() - p.lastSeen) or nil
-    local when = (ago and ago > 2) and ("  ·  synced " .. S.fmtTime(ago) .. " ago") or "  ·  syncing live"
-    card.status:SetText("|cff44ff44● Connected|r|cff7a7a7a" .. when .. "|r")
+    local when = (ago and ago > 2) and ("  ·  " .. L["synced "] .. S.fmtTime(ago) .. L[" ago"]) or ("  ·  " .. L["syncing live"])
+    card.status:SetText("|cff44ff44● " .. L["Connected"] .. "|r|cff7a7a7a" .. when .. "|r")
   else
-    card.status:SetText("|cffe0a020○ Waiting for sync…|r |cff7a7a7a(they may be offline)|r")
+    card.status:SetText("|cffe0a020○ " .. L["Waiting for sync…"] .. "|r |cff7a7a7a" .. L["(they may be offline)"] .. "|r")
   end
 
   -- meta (spec/class · level · ilvl) when we have a snapshot
@@ -249,11 +205,11 @@ local function makeRow(parent)
   name:SetTextColor(0.90, 0.86, 0.74)
   row.nameFS = name
 
-  local remove = makeButton(row, "Remove", 74, 24)
+  local remove = Widgets.Button(row, L["Remove"], 74, 24)
   remove:SetPoint("RIGHT", row, "RIGHT", -10, 0)
   row.remove = remove
 
-  local setActive = makeButton(row, "Set active", 92, 24)
+  local setActive = Widgets.Button(row, L["Set active"], 92, 24)
   setActive:SetPoint("RIGHT", remove, "LEFT", -8, 0)
   row.setActive = setActive
 
@@ -267,16 +223,16 @@ local function build(host)
   local f = CreateFrame("Frame", nil, host)
   f:SetSize(10, 10)
 
-  f.hActive = S.makeSectionHeader(f)
+  f.hActive = Widgets.SectionHeader(f)
   f.hero = makeHero(f)
 
-  f.hSaved = S.makeSectionHeader(f)
-  f.savedEmpty = S.makeSubText(f)
-  f.savedEmpty:SetText("No other saved partners. Invite someone below to keep them on hand.")
+  f.hSaved = Widgets.SectionHeader(f)
+  f.savedEmpty = Widgets.SubText(f)
+  f.savedEmpty:SetText(L["No other saved partners. Invite someone below to keep them on hand."])
 
-  f.hAdd = S.makeSectionHeader(f)   -- "Add a partner" description rides on the header's sub-text
+  f.hAdd = Widgets.SectionHeader(f)   -- "Add a partner" description rides on the header's sub-text
 
-  local box = makeInput(f, 190, 26)
+  local box = Widgets.Input(f, 190, 26)
   local acOn = enableNameAutocomplete(box)
   local function doInvite()
     local n = box:GetText()
@@ -295,7 +251,7 @@ local function build(host)
   end)
   f.inviteBox = box
 
-  local inviteBtn = makeButton(f, "Invite", 84, 26)
+  local inviteBtn = Widgets.Button(f, L["Invite"], 84, 26)
   inviteBtn:SetScript("OnClick", doInvite)
   f.inviteBtn = inviteBtn
 
@@ -316,12 +272,12 @@ local function refresh(f, ctx)
   local function placeHeader(h, title, y, subtext)
     h.label:ClearAllPoints()
     h.label:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y)
-    S.styleHeader(h, title, W, subtext)
-    return y - 30 - S.subHeight(h)
+    Widgets.StyleHeader(h, title, W, subtext)
+    return y - 30 - Widgets.SubHeight(h)
   end
 
   -- 1) Active partner ------------------------------------------------------
-  local y = placeHeader(f.hActive, "Active partner", 0)
+  local y = placeHeader(f.hActive, L["Active partner"], 0)
   f.hero._W = W
   f.hero:ClearAllPoints()
   f.hero:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y - 4)
@@ -329,7 +285,7 @@ local function refresh(f, ctx)
   y = y - 4 - CARD_H - SECTION_GAP
 
   -- 2) Saved partners (everyone except the active one) ---------------------
-  y = placeHeader(f.hSaved, "Saved partners", y)
+  y = placeHeader(f.hSaved, L["Saved partners"], y)
   y = y - HEAD_PAD
 
   local shown = 0
@@ -361,8 +317,8 @@ local function refresh(f, ctx)
   y = y - SECTION_GAP
 
   -- 3) Add a partner -------------------------------------------------------
-  y = placeHeader(f.hAdd, "Add a partner", y,
-    "Start typing a name — pick a suggestion (Tab) to fill the realm automatically. They'll get an invite popup to accept.")
+  y = placeHeader(f.hAdd, L["Add a partner"], y,
+    L["Start typing a name — pick a suggestion (Tab) to fill the realm automatically. They'll get an invite popup to accept."])
   y = y - HEAD_PAD
   f.inviteBox:ClearAllPoints()
   f.inviteBox:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y)
@@ -375,4 +331,4 @@ local function refresh(f, ctx)
   return h
 end
 
-ns.Dashboard.RegisterPage({ key = "partners", label = "Partners", order = 8, separator = true, build = build, refresh = refresh })
+ns.Dashboard.RegisterPage({ key = "partners", label = L["Partners"], order = 8, separator = true, build = build, refresh = refresh })

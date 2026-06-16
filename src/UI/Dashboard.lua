@@ -15,7 +15,10 @@ local Dashboard = {}
 ns.Dashboard = Dashboard
 
 local S = ns.UI.Shared
+local Theme = ns.UI.Theme
+local Widgets = ns.UI.Widgets
 local Row = ns.UI.Row
+local L = ns.L
 
 local WIDTH_COMPACT, WIDTH_EXPANDED, PAD = 320, 1280, 16
 local PANEL_H_EXPANDED = 640        -- FIXED expanded height; content scrolls
@@ -24,7 +27,6 @@ local NAV_W, NAV_BTN_H = 178, 32
 local HOST_X = PAD + NAV_W + 18
 local SCROLLBAR_W = 26
 local DETAIL_W = 300         -- right-side preview pane width (when a page uses it)
-local CIRCLE_MASK = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask"
 
 local panel, host, nav
 local navButtons = {}
@@ -39,6 +41,9 @@ local function innerHeight() return PANEL_H_EXPANDED - CONTENT_TOP - 2 * PAD end
 -- ---------------------------------------------------------------------------
 -- Page registry (pages register at load; built lazily on first Select)
 -- ---------------------------------------------------------------------------
+--- Register a tab page. Pages call this at load; the shell builds them lazily.
+--- @param desc table { key, label, order, detail?, detailTitle?, detailHint?,
+---   separator?, build(host)->frame, refresh(frame, ctx)->height, onShow? }
 function Dashboard.RegisterPage(desc)
   -- desc = { key, label, order, stub, build(host)->frame, refresh(frame, ctx)->height }
   table.insert(pages, desc)
@@ -56,7 +61,7 @@ local function getContext()
   end
   local partner = ns.state.partner
   if not ns.state.linked or not partner then
-    ns.state.partnerName = (ns.Pairing and ns.Pairing.PartnerName() and ns.Pairing.ShortName(ns.Pairing.PartnerName())) or "not paired"
+    ns.state.partnerName = (ns.Pairing and ns.Pairing.PartnerName() and ns.Pairing.ShortName(ns.Pairing.PartnerName())) or L["not paired"]
     return {}, "wait", 0.9
   end
   local stale = (GetTime() - (partner.lastSeen or 0)) > ns.STALE_AFTER
@@ -78,18 +83,18 @@ end
 local function setPortrait(cls)
   local p = getPortrait(); if not p then return end
   local atlas = (cls and cls ~= "") and ("classicon-" .. strlower(cls)) or nil
-  if atlas and S.atlasExists(atlas) then p:SetTexCoord(0, 1, 0, 1); p:SetAtlas(atlas)
+  if atlas and Theme.AtlasExists(atlas) then p:SetTexCoord(0, 1, 0, 1); p:SetAtlas(atlas)
   elseif cls and cls ~= "" and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[cls] then
-    p:SetTexture(S.CLASS_CIRCLES); p:SetTexCoord(unpack(CLASS_ICON_TCOORDS[cls]))
+    p:SetTexture(Theme.CLASS_CIRCLES); p:SetTexCoord(unpack(CLASS_ICON_TCOORDS[cls]))
   else p:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark"); p:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
 end
 local function updateHeader(snap, verdict)
   local r, g, b = S.classColor(snap.cls)
   setPortrait(snap.cls)
-  setTitle(S.hex(r, g, b) .. (ns.state.partnerName or "Partner") .. "|r")
-  panel.vDot:SetTexture(S.INDICATOR[verdict] or S.INDICATOR.wait)
-  local vc = S.VERDICT_RGB[verdict] or S.VERDICT_RGB.wait
-  panel.vLabel:SetText(S.VERDICT_LABEL[verdict] or ""); panel.vLabel:SetTextColor(vc[1], vc[2], vc[3])
+  setTitle(S.hex(r, g, b) .. (ns.state.partnerName or L["Partner"]) .. "|r")
+  panel.vDot:SetTexture(Theme.INDICATOR[verdict] or Theme.INDICATOR.wait)
+  local vc = Theme.VERDICT_RGB[verdict] or Theme.VERDICT_RGB.wait
+  panel.vLabel:SetText(Theme.VERDICT_LABEL[verdict] or ""); panel.vLabel:SetTextColor(vc[1], vc[2], vc[3])
 end
 
 -- ---------------------------------------------------------------------------
@@ -101,7 +106,7 @@ local function setNavActive(b, active)
   b.glow:SetShown(active)
   if active then
     b.hl:Hide()
-    b.fs:SetTextColor(S.CREAM[1], S.CREAM[2], S.CREAM[3])
+    b.fs:SetTextColor(Theme.CREAM[1], Theme.CREAM[2], Theme.CREAM[3])
   else
     if b.stub then b.fs:SetTextColor(0.5, 0.5, 0.5) else b.fs:SetTextColor(0.86, 0.82, 0.70) end
   end
@@ -115,15 +120,15 @@ local function makeNavButton(parent, desc)
   -- active glow (gold gradient fading right)
   local glow = b:CreateTexture(nil, "BACKGROUND"); glow:SetAllPoints(b); glow:SetColorTexture(1, 1, 1, 1)
   if CreateColor then
-    glow:SetGradient("HORIZONTAL", CreateColor(S.GOLD[1], S.GOLD[2], S.GOLD[3], 0.28), CreateColor(S.GOLD[1], S.GOLD[2], S.GOLD[3], 0.0))
-  else glow:SetColorTexture(S.GOLD[1], S.GOLD[2], S.GOLD[3], 0.16) end
+    glow:SetGradient("HORIZONTAL", CreateColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3], 0.28), CreateColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3], 0.0))
+  else glow:SetColorTexture(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3], 0.16) end
   glow:Hide(); b.glow = glow
   -- hover highlight (subtle white)
   local hl = b:CreateTexture(nil, "BACKGROUND"); hl:SetAllPoints(b); hl:SetColorTexture(1, 1, 1, 0.06); hl:Hide()
   b.hl = hl
   -- left accent bar
   local accent = b:CreateTexture(nil, "ARTWORK"); accent:SetSize(3, NAV_BTN_H - 10)
-  accent:SetPoint("LEFT", b, "LEFT", 2, 0); accent:SetColorTexture(S.GOLD[1], S.GOLD[2], S.GOLD[3]); accent:Hide()
+  accent:SetPoint("LEFT", b, "LEFT", 2, 0); accent:SetColorTexture(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3]); accent:Hide()
   b.accent = accent
 
   local fs = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -148,7 +153,7 @@ local function buildCompact(content)
   c.ilvlFS = content:CreateFontString(nil, "OVERLAY", "GameFontNormal"); c.ilvlFS:SetJustifyH("RIGHT")
   c.rows = {}
   for _, key in ipairs({ "durability", "flask", "food", "wpn", "rune", "bags" }) do
-    c.rows[key] = Row.Create(content, S.ICON[key])
+    c.rows[key] = Row.Create(content, Theme.ICON[key])
   end
   c.sep = content:CreateTexture(nil, "ARTWORK"); c.sep:SetColorTexture(1, 1, 1, 0.08); c.sep:SetHeight(1)
   c.details = content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -216,19 +221,7 @@ local compact
 -- ---------------------------------------------------------------------------
 -- Item detail renderer (custom, non-tooltip — styled as part of the addon)
 -- ---------------------------------------------------------------------------
--- Circular chip whose rim recolors to the item's quality.
-local function buildDetailChip(parent, size)
-  local c = CreateFrame("Frame", nil, parent); c:SetSize(size, size)
-  local rim = c:CreateTexture(nil, "BACKGROUND"); rim:SetAllPoints(c); rim:SetColorTexture(S.GOLD[1], S.GOLD[2], S.GOLD[3], 0.55)
-  local rimMask = c:CreateMaskTexture(); rimMask:SetAllPoints(rim); rimMask:SetTexture(CIRCLE_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE"); rim:AddMaskTexture(rimMask)
-  local fill = c:CreateTexture(nil, "BORDER"); fill:SetPoint("CENTER"); fill:SetSize(size - 3, size - 3); fill:SetColorTexture(0.09, 0.09, 0.12, 1)
-  local fm = c:CreateMaskTexture(); fm:SetAllPoints(fill); fm:SetTexture(CIRCLE_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE"); fill:AddMaskTexture(fm)
-  local icon = c:CreateTexture(nil, "ARTWORK"); icon:SetPoint("CENTER"); icon:SetSize(size - 9, size - 9); icon:SetTexCoord(.1, .9, .1, .9)
-  local im = c:CreateMaskTexture(); im:SetAllPoints(icon); im:SetTexture(CIRCLE_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE"); icon:AddMaskTexture(im)
-  c.rim, c.icon = rim, icon
-  return c
-end
-
+-- The detail pane reuses Widgets.Chip; its `.rim` recolors to the item's quality.
 local function ensureDetailLine(i)
   if panel.detailLines[i] then return panel.detailLines[i] end
   local fs = panel.detailBody:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -242,7 +235,7 @@ end
 local function ensureChipLine(i)
   if panel.detailChipLines[i] then return panel.detailChipLines[i] end
   local f = CreateFrame("Frame", nil, panel.detailBody); f:SetWidth(DETAIL_W - 8)
-  local chip = buildDetailChip(f, 24); chip:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+  local chip = Widgets.Chip(f, 24); chip:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
   local fs = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   fs:SetPoint("LEFT", chip, "RIGHT", 8, 0); fs:SetPoint("RIGHT", f, "RIGHT", 0, 0)
   fs:SetJustifyH("LEFT"); fs:SetJustifyV("MIDDLE")
@@ -334,7 +327,7 @@ local function renderItemDetail()
   local qAtlas
   if q and q > 0 then
     for _, a in ipairs({ "Professions-ChatIcon-Quality-Tier" .. q, "Professions-Icon-Quality-Tier" .. q }) do
-      if S.atlasExists(a) then qAtlas = a; break end
+      if Theme.AtlasExists(a) then qAtlas = a; break end
     end
   end
   local contentH = 60 + (panel.detailText:GetStringHeight() or 0)
@@ -359,10 +352,10 @@ local function renderQuestDetail()
   local q = panel._detailQuest
   if not q then return end
   panel.detailHint:Hide()
-  S.applyIcon(panel.detailChip.icon, S.I_QUEST)
+  Theme.ApplyIcon(panel.detailChip.icon, Theme.I_QUEST)
   panel.detailChip:Show()
   panel.detailName:SetText(q.title or ("Quest #" .. (q.id or 0)))
-  panel.detailName:SetTextColor(S.CREAM[1], S.CREAM[2], S.CREAM[3])
+  panel.detailName:SetTextColor(Theme.CREAM[1], Theme.CREAM[2], Theme.CREAM[3])
 
   local function prog(side)
     if not side then return "|cff808080not on this quest|r" end
@@ -418,8 +411,8 @@ local function renderAchvDetail()
   panel.detailChip.icon:SetTexture(a.icon or 134400)
   panel.detailChip:Show()
   panel.detailName:SetText(a.name or ("Achievement #" .. (a.id or 0)))
-  if a.together then panel.detailName:SetTextColor(S.GOLD[1], S.GOLD[2], S.GOLD[3])
-  else panel.detailName:SetTextColor(S.CREAM[1], S.CREAM[2], S.CREAM[3]) end
+  if a.together then panel.detailName:SetTextColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3])
+  else panel.detailName:SetTextColor(Theme.CREAM[1], Theme.CREAM[2], Theme.CREAM[3]) end
 
   local parts = {}
   if a.together then
@@ -456,7 +449,7 @@ local function styleScrollbar(sf)
   end
   sb:SetWidth(8)
   local thumb = sb.GetThumbTexture and sb:GetThumbTexture()
-  if thumb then thumb:SetColorTexture(S.GOLD[1], S.GOLD[2], S.GOLD[3], 0.5); thumb:SetWidth(6) end
+  if thumb then thumb:SetColorTexture(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3], 0.5); thumb:SetWidth(6) end
 end
 
 function Dashboard.Init()
@@ -554,9 +547,9 @@ function Dashboard.Init()
   detail:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", -PAD, PAD)
   detail:SetWidth(DETAIL_W)
   panel.detail = detail
-  local dHdr = S.makeSectionHeader(detail)
+  local dHdr = Widgets.SectionHeader(detail)
   dHdr.label:SetPoint("TOPLEFT", detail, "TOPLEFT", 0, 0)
-  S.styleHeader(dHdr, "Item Details", DETAIL_W)
+  Widgets.StyleHeader(dHdr, L["Item Details"], DETAIL_W)
   panel.detailHdr = dHdr
   -- scrollable area (long recipe/item tooltips can exceed the pane height)
   local dscroll = CreateFrame("ScrollFrame", nil, detail, "UIPanelScrollFrameTemplate")
@@ -574,11 +567,11 @@ function Dashboard.Init()
   panel.detailBody = body
   local hint = body:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   hint:SetPoint("TOPLEFT", body, "TOPLEFT", 2, -2); hint:SetWidth(DETAIL_W - 4); hint:SetJustifyH("LEFT")
-  hint:SetTextColor(0.6, 0.6, 0.62); hint:SetText("Hover an item to preview it here.")
+  hint:SetTextColor(0.6, 0.6, 0.62); hint:SetText(L["Hover an item to preview it here."])
   panel.detailHint = hint
   -- Custom (non-tooltip) item detail, styled as part of the addon:
   -- chip (same as throughout) + name (vertically centered) + scanned lines.
-  local chip = buildDetailChip(body, 46); chip:SetPoint("TOPLEFT", body, "TOPLEFT", 2, -2); chip:Hide()
+  local chip = Widgets.Chip(body, 46); chip:SetPoint("TOPLEFT", body, "TOPLEFT", 2, -2); chip:Hide()
   panel.detailChip = chip
 
   local dn = body:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -595,7 +588,7 @@ function Dashboard.Init()
   panel.detailChipLines = {}
 
   -- crafting-quality shown as one of our chips
-  local qchip = buildDetailChip(body, 30); qchip:Hide(); panel.detailQChip = qchip
+  local qchip = Widgets.Chip(body, 30); qchip:Hide(); panel.detailQChip = qchip
   local qlbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   qlbl:SetPoint("LEFT", qchip, "RIGHT", 10, 0); qlbl:SetJustifyH("LEFT"); qlbl:Hide()
   local qff = GameFontHighlight:GetFont(); if qff then qlbl:SetFont(qff, 14) end
@@ -617,9 +610,9 @@ function Dashboard.Init()
       local div = nav:CreateTexture(nil, "ARTWORK")
       div:SetHeight(1); div:SetColorTexture(1, 1, 1, 1)
       if CreateColor then
-        div:SetGradient("HORIZONTAL", CreateColor(S.GOLD[1], S.GOLD[2], S.GOLD[3], 0.0),
-          CreateColor(S.GOLD[1], S.GOLD[2], S.GOLD[3], 0.45))
-      else div:SetVertexColor(S.GOLD[1], S.GOLD[2], S.GOLD[3], 0.3) end
+        div:SetGradient("HORIZONTAL", CreateColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3], 0.0),
+          CreateColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3], 0.45))
+      else div:SetVertexColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3], 0.3) end
       div:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 6, -(gap / 2))
       div:SetPoint("TOPRIGHT", prev, "BOTTOMRIGHT", -6, -(gap / 2))
     end
@@ -632,8 +625,6 @@ function Dashboard.Init()
   end
 
   compact = buildCompact(content)
-
-  ns:Print("|cff44ff44UI build B12 loaded|r")
 
   Dashboard.RestorePosition()
   panel:SetScale(ns.db.scale or 1.0)
@@ -726,6 +717,8 @@ function Dashboard.OpenTab(key)
   if panel then Dashboard.Select(key); Dashboard.ApplyMode(); Dashboard.Show() end
 end
 
+--- Switch the visible tab to `key` (falls back to the first page).
+--- @param key string A registered page key.
 function Dashboard.Select(key)
   local desc = pagesByKey[key] or pages[1]
   if not desc then return end
@@ -743,8 +736,8 @@ function Dashboard.Select(key)
   host:SetVerticalScroll(0)
   if desc.detail then
     Dashboard.ClearDetail()
-    S.styleHeader(panel.detailHdr, desc.detailTitle or "Item Details", DETAIL_W)
-    panel.detailHint:SetText(desc.detailHint or "Hover an item to preview it here.")
+    Widgets.StyleHeader(panel.detailHdr, desc.detailTitle or L["Item Details"], DETAIL_W)
+    panel.detailHint:SetText(desc.detailHint or L["Hover an item to preview it here."])
   end
   if desc.onShow then desc.onShow() end
   for _, b in ipairs(navButtons) do setNavActive(b, b.key == desc.key) end

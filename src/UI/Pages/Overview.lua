@@ -5,9 +5,14 @@
 
 local addonName, ns = ...
 local S = ns.UI.Shared
+local Theme = ns.UI.Theme
+local Widgets = ns.UI.Widgets
 local Row = ns.UI.Row
+local L = ns.L
 
 local MODEL_W, MODEL_H = 280, 420
+-- SECTION_GAP is 22 here (tighter than Theme.SECTION_GAP) — intentional for this
+-- model-beside-columns layout.
 local SECTION_GAP, ROW_GAP, COL_GAP = 22, 6, 30
 
 local function build(host)
@@ -18,10 +23,9 @@ local function build(host)
   local mb = CreateFrame("Frame", nil, f, "BackdropTemplate")
   mb:SetSize(MODEL_W, MODEL_H)
   mb:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-  mb:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-    edgeSize = 12, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
+  mb:SetBackdrop(Theme.BACKDROP_TOOLTIP)
   mb:SetBackdropColor(0, 0, 0, 0.5)
-  mb:SetBackdropBorderColor(S.GOLD[1] * 0.7, S.GOLD[2] * 0.7, S.GOLD[3] * 0.7, 0.9)
+  mb:SetBackdropBorderColor(Theme.GOLD[1] * 0.7, Theme.GOLD[2] * 0.7, Theme.GOLD[3] * 0.7, 0.9)
   f.modelBox = mb
 
   local bg = mb:CreateTexture(nil, "BACKGROUND")
@@ -53,14 +57,14 @@ local function build(host)
 
   f.headers = {}
   for _, k in ipairs({ "readiness", "activity", "status", "gear", "quest" }) do
-    f.headers[k] = S.makeSectionHeader(f)
+    f.headers[k] = Widgets.SectionHeader(f)
   end
   f.rows = {}
   for _, k in ipairs({ "durability", "flask", "food", "wpn", "rune", "bags" }) do
-    f.rows[k] = Row.Create(f, S.ICON[k])
+    f.rows[k] = Row.Create(f, Theme.ICON[k])
   end
   f.nowRows = {}
-  for i = 1, 4 do f.nowRows[i] = Row.CreateInfo(f, S.ICON.bags) end
+  for i = 1, 4 do f.nowRows[i] = Row.CreateInfo(f, Theme.ICON.bags) end
   f.bodies = {}
   for _, k in ipairs({ "activity", "status", "gear", "quest" }) do
     local b = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -91,8 +95,8 @@ local function refresh(f, ctx)
     f.model.currentUnit = nil; f.model:Hide()
     local mf = f.modelFallback
     local atlas = (snap.cls and snap.cls ~= "") and ("classicon-" .. strlower(snap.cls)) or nil
-    if atlas and S.atlasExists(atlas) then mf:SetTexCoord(0, 1, 0, 1); mf:SetAtlas(atlas)
-    elseif snap.cls and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[snap.cls] then mf:SetTexture(S.CLASS_CIRCLES); mf:SetTexCoord(unpack(CLASS_ICON_TCOORDS[snap.cls]))
+    if atlas and Theme.AtlasExists(atlas) then mf:SetTexCoord(0, 1, 0, 1); mf:SetAtlas(atlas)
+    elseif snap.cls and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[snap.cls] then mf:SetTexture(Theme.CLASS_CIRCLES); mf:SetTexCoord(unpack(CLASS_ICON_TCOORDS[snap.cls]))
     else mf:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark"); mf:SetTexCoord(.08, .92, .08, .92) end
     mf:Show()
   end
@@ -114,12 +118,12 @@ local function refresh(f, ctx)
   local nowW = math.max(220, W - nowX)
 
   -- hide unused headers/bodies
-  for _, k in ipairs({ "status", "gear", "quest" }) do S.hideHeader(f.headers[k]); f.bodies[k]:Hide() end
+  for _, k in ipairs({ "status", "gear", "quest" }) do Widgets.HideHeader(f.headers[k]); f.bodies[k]:Hide() end
 
   -- Readiness
   f.headers.readiness.label:ClearAllPoints()
   f.headers.readiness.label:SetPoint("TOPLEFT", f, "TOPLEFT", rcX, 0)
-  S.styleHeader(f.headers.readiness, "Readiness", READY_W)
+  Widgets.StyleHeader(f.headers.readiness, L["Readiness"], READY_W)
   S.setRowValues(f.rows, snap)
   local anchor, count = f.headers.readiness.diamond, 0
   for _, key in ipairs({ "durability", "flask", "food", "wpn", "rune", "bags" }) do
@@ -131,29 +135,29 @@ local function refresh(f, ctx)
       anchor = row.frame; count = count + 1
     else row:SetShown(false) end
   end
-  local col1H = S.HEADER_H + count * (Row.HEIGHT + ROW_GAP)
+  local col1H = Theme.HEADER_H + count * (Row.HEIGHT + ROW_GAP)
 
   -- Now (current activity + location) — rendered as chip info-rows like Readiness
   f.bodies.activity:Hide()
   local items = {}
   if (snap.zone or "") ~= "" then
-    items[#items + 1] = { icon = S.I_LOC, label = "Location", value = snap.zone .. (snap.rest and "  |cff6cb6ff(resting)|r" or "") }
+    items[#items + 1] = { icon = Theme.I_LOC, label = L["Location"], value = snap.zone .. (snap.rest and "  |cff6cb6ff(resting)|r" or "") }
   end
   if (snap.cx or 0) > 0 or (snap.cy or 0) > 0 then
-    items[#items + 1] = { icon = S.I_COORDS, label = "Coordinates", value = string.format("%.1f, %.1f", snap.cx or 0, snap.cy or 0) }
+    items[#items + 1] = { icon = Theme.I_COORDS, label = L["Coordinates"], value = string.format("%.1f, %.1f", snap.cx or 0, snap.cy or 0) }
   end
   if (snap.key or "") ~= "" and (snap.klvl or 0) > 0 then
-    items[#items + 1] = { icon = S.I_KEY, label = "Keystone", value = "|cffa335ee" .. S.midTruncate(snap.key, 16) .. " +" .. snap.klvl .. "|r" }
+    items[#items + 1] = { icon = Theme.I_KEY, label = L["Keystone"], value = "|cffa335ee" .. S.midTruncate(snap.key, 16) .. " +" .. snap.klvl .. "|r" }
   end
   if (snap.gold or 0) > 0 then
-    items[#items + 1] = { icon = S.I_GOLD, label = "Gold", value = S.fmtGold(snap.gold) }
+    items[#items + 1] = { icon = Theme.I_GOLD, label = L["Gold"], value = S.fmtGold(snap.gold) }
   end
 
   local col2H = 0
   if #items > 0 then
     f.headers.activity.label:ClearAllPoints()
     f.headers.activity.label:SetPoint("TOPLEFT", f, "TOPLEFT", nowX, 0)
-    S.styleHeader(f.headers.activity, "Now", nowW)
+    Widgets.StyleHeader(f.headers.activity, L["Now"], nowW)
     local anchor2 = f.headers.activity.diamond
     for i, it in ipairs(items) do
       local r = f.nowRows[i]
@@ -162,9 +166,9 @@ local function refresh(f, ctx)
       r.frame:SetPoint("TOPLEFT", anchor2, "BOTTOMLEFT", anchor2 == f.headers.activity.diamond and -3 or 0, anchor2 == f.headers.activity.diamond and -8 or -ROW_GAP)
       anchor2 = r.frame
     end
-    col2H = S.HEADER_H + #items * (Row.HEIGHT + ROW_GAP)
+    col2H = Theme.HEADER_H + #items * (Row.HEIGHT + ROW_GAP)
   else
-    S.hideHeader(f.headers.activity)
+    Widgets.HideHeader(f.headers.activity)
   end
   for i = #items + 1, 4 do f.nowRows[i]:SetShown(false) end
 
@@ -174,4 +178,4 @@ local function refresh(f, ctx)
   return h
 end
 
-ns.Dashboard.RegisterPage({ key = "overview", label = "Overview", order = 1, build = build, refresh = refresh })
+ns.Dashboard.RegisterPage({ key = "overview", label = L["Overview"], order = 1, build = build, refresh = refresh })

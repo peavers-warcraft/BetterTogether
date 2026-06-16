@@ -17,9 +17,12 @@
 
 local addonName, ns = ...
 local S = ns.UI.Shared
+local Theme = ns.UI.Theme
+local Widgets = ns.UI.Widgets
 local Row = ns.UI.Row
+local L = ns.L
 
-local SEC_GAP = 24
+local SEC_GAP = Theme.SECTION_GAP
 local CARD_H = 64
 
 -- Hover-preview + click-lock detail controller (shared with Quests/Inventory).
@@ -34,7 +37,7 @@ local detail = S.makePinController({
 local viewEra
 local requested = {}
 
-local MONTHS = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" }
+local MONTHS = { L["Jan"], L["Feb"], L["Mar"], L["Apr"], L["May"], L["Jun"], L["Jul"], L["Aug"], L["Sep"], L["Oct"], L["Nov"], L["Dec"] }
 local function fmtDate(e)
   if not e then return nil end
   return (e.d or 0) .. " " .. (MONTHS[e.m] or "?") .. " " .. (e.y or 0)
@@ -161,28 +164,28 @@ local function selectFeaturedMemories(matches)
     end
     if best then
       local n = today.y - best.y
-      add(best, n .. (n == 1 and " year ago today" or " years ago today"))
+      add(best, n .. (n == 1 and L[" year ago today"] or L[" years ago today"]))
     end
   end
 
   -- 2) Where it began — the oldest shared memory.
   local oldest
   for _, m in ipairs(matches) do if not oldest or m.code < oldest.code then oldest = m end end
-  add(oldest, "Where it began")
+  add(oldest, L["Where it began"])
 
   -- 3) One to remember — the highest-point shared achievement.
   local biggest
   for _, m in ipairs(matches) do
     if (m.points or 0) > 0 and (not biggest or m.points > biggest.points) then biggest = m end
   end
-  add(biggest, "One to remember")
+  add(biggest, L["One to remember"])
 
   -- Pad toward 3 with the most recent matches so the section stays full.
   if #picks < 3 then
     local recent = {}
     for _, m in ipairs(matches) do recent[#recent + 1] = m end
     table.sort(recent, function(a, b) return a.code > b.code end)
-    for _, m in ipairs(recent) do add(m, "Together, not long ago") end
+    for _, m in ipairs(recent) do add(m, L["Together, not long ago"]) end
   end
   return picks
 end
@@ -237,27 +240,26 @@ end
 local function makeNavButton(parent, label)
   local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
   b:SetSize(26, 24)
-  b:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8",
-    edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+  b:SetBackdrop(Theme.BACKDROP_HAIRLINE)
   b:SetBackdropColor(0.13, 0.12, 0.10, 0.95)
-  b:SetBackdropBorderColor(S.GOLD[1] * 0.7, S.GOLD[2] * 0.7, S.GOLD[3] * 0.7, 0.85)
+  b:SetBackdropBorderColor(Theme.GOLD[1] * 0.7, Theme.GOLD[2] * 0.7, Theme.GOLD[3] * 0.7, 0.85)
   local fs = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  fs:SetPoint("CENTER", 0, 0); fs:SetText(label); fs:SetTextColor(S.GOLD[1], S.GOLD[2], S.GOLD[3])
+  fs:SetPoint("CENTER", 0, 0); fs:SetText(label); fs:SetTextColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3])
   b.fs = fs
   b:SetScript("OnEnter", function(self)
     if not self:IsEnabled() then return end
-    self:SetBackdropBorderColor(S.GOLD[1], S.GOLD[2], S.GOLD[3], 1)
-    fs:SetTextColor(S.CREAM[1], S.CREAM[2], S.CREAM[3])
+    self:SetBackdropBorderColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3], 1)
+    fs:SetTextColor(Theme.CREAM[1], Theme.CREAM[2], Theme.CREAM[3])
   end)
   b:SetScript("OnLeave", function(self)
-    self:SetBackdropBorderColor(S.GOLD[1] * 0.7, S.GOLD[2] * 0.7, S.GOLD[3] * 0.7, 0.85)
-    fs:SetTextColor(S.GOLD[1], S.GOLD[2], S.GOLD[3])
+    self:SetBackdropBorderColor(Theme.GOLD[1] * 0.7, Theme.GOLD[2] * 0.7, Theme.GOLD[3] * 0.7, 0.85)
+    fs:SetTextColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3])
   end)
   function b:SetEnabledLook(on)
     self:SetEnabled(on)
     local k = on and 0.7 or 0.35
-    self:SetBackdropBorderColor(S.GOLD[1] * k, S.GOLD[2] * k, S.GOLD[3] * k, on and 0.85 or 0.5)
-    fs:SetTextColor(on and S.GOLD[1] or 0.4, on and S.GOLD[2] or 0.4, on and S.GOLD[3] or 0.4)
+    self:SetBackdropBorderColor(Theme.GOLD[1] * k, Theme.GOLD[2] * k, Theme.GOLD[3] * k, on and 0.85 or 0.5)
+    fs:SetTextColor(on and Theme.GOLD[1] or 0.4, on and Theme.GOLD[2] or 0.4, on and Theme.GOLD[3] or 0.4)
   end
   return b
 end
@@ -268,21 +270,20 @@ end
 local function makeCard(parent)
   local c = CreateFrame("Button", nil, parent, "BackdropTemplate")
   c:SetHeight(CARD_H)
-  c:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8",
-    edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+  c:SetBackdrop(Theme.BACKDROP_HAIRLINE)
   c:SetBackdropColor(0.12, 0.10, 0.07, 0.9)
-  c:SetBackdropBorderColor(S.GOLD[1] * 0.6, S.GOLD[2] * 0.6, S.GOLD[3] * 0.6, 0.7)
+  c:SetBackdropBorderColor(Theme.GOLD[1] * 0.6, Theme.GOLD[2] * 0.6, Theme.GOLD[3] * 0.6, 0.7)
   local hl = c:CreateTexture(nil, "BACKGROUND"); hl:SetAllPoints(c); hl:SetColorTexture(1, 1, 1, 0.05); hl:Hide()
   c:HookScript("OnEnter", function() hl:Show() end)
   c:HookScript("OnLeave", function() hl:Hide() end)
-  c.chip = Row.MakeChip(c, 44, S.I_BOSS); c.chip:SetPoint("LEFT", c, "LEFT", 12, 0)
+  c.chip = Row.MakeChip(c, 44, Theme.I_BOSS); c.chip:SetPoint("LEFT", c, "LEFT", 12, 0)
 
   -- name + date sit on one centered line; tag floats just above the name.
   c.name = c:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   c.name:SetPoint("LEFT", c.chip, "RIGHT", 14, -3); c.name:SetJustifyH("LEFT"); c.name:SetWordWrap(false)
-  c.name:SetTextColor(S.CREAM[1], S.CREAM[2], S.CREAM[3])
+  c.name:SetTextColor(Theme.CREAM[1], Theme.CREAM[2], Theme.CREAM[3])
   c.tag = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  c.tag:SetPoint("BOTTOMLEFT", c.name, "TOPLEFT", 0, 5); c.tag:SetTextColor(S.GOLD[1], S.GOLD[2], S.GOLD[3])
+  c.tag:SetPoint("BOTTOMLEFT", c.name, "TOPLEFT", 0, 5); c.tag:SetTextColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3])
   c.date = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   c.date:SetPoint("RIGHT", c, "RIGHT", -14, -3); c.date:SetTextColor(0.72, 0.72, 0.74)
   return c
@@ -291,16 +292,16 @@ end
 local function build(host)
   local f = CreateFrame("Frame", nil, host); f:SetSize(10, 10)
   f.cards = {}
-  f.featHeader = S.makeSectionHeader(f)
-  f.browseHeader = S.makeSectionHeader(f)
+  f.featHeader = Widgets.SectionHeader(f)
+  f.browseHeader = Widgets.SectionHeader(f)
   f.subHeaders = {}
   f.rows = {}
-  f.note  = S.makeSubText(f)   -- featured-area message (shared subheader font)
-  f.note2 = S.makeSubText(f)   -- era-body message
+  f.note  = Widgets.SubText(f)   -- featured-area message (shared subheader font)
+  f.note2 = Widgets.SubText(f)   -- era-body message
   f.prev = makeNavButton(f, "<")
   f.next = makeNavButton(f, ">")
   f.eraLabel = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  f.eraLabel:SetTextColor(S.CREAM[1], S.CREAM[2], S.CREAM[3])
+  f.eraLabel:SetTextColor(Theme.CREAM[1], Theme.CREAM[2], Theme.CREAM[3])
   f.prev:SetScript("OnClick", function() stepEra(-1) end)
   f.next:SetScript("OnClick", function() stepEra(1) end)
   return f
@@ -311,11 +312,11 @@ local function ensureCard(f, i)
   return f.cards[i]
 end
 local function ensureSubHeader(f, i)
-  if not f.subHeaders[i] then f.subHeaders[i] = S.makeSectionHeader(f) end
+  if not f.subHeaders[i] then f.subHeaders[i] = Widgets.SectionHeader(f) end
   return f.subHeaders[i]
 end
 local function ensureRow(f, i)
-  if not f.rows[i] then f.rows[i] = Row.CreateInfo(f, S.I_BOSS) end
+  if not f.rows[i] then f.rows[i] = Row.CreateInfo(f, Theme.I_BOSS) end
   return f.rows[i]
 end
 
@@ -323,14 +324,14 @@ end
 -- or a loading note). Hides every other widget so the page reads as one clean state.
 local function fullPageNote(f, colW, text, topPad)
   f.featHeader.label:ClearAllPoints(); f.featHeader.label:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-  S.styleHeader(f.featHeader, "Memories together", colW)
-  local yOff = S.HEADER_H
+  Widgets.StyleHeader(f.featHeader, L["Memories together"], colW)
+  local yOff = Theme.HEADER_H
   f.note:Show(); f.note:ClearAllPoints(); f.note:SetPoint("TOPLEFT", f, "TOPLEFT", 3, -(yOff + topPad))
   f.note:SetWidth(colW - 6); f.note:SetText(text)
   f.note2:Hide()
   f.prev:Hide(); f.next:Hide(); f.eraLabel:Hide()
   for i = 1, #f.cards do f.cards[i]:Hide() end
-  for i = 1, #f.subHeaders do S.hideHeader(f.subHeaders[i]) end
+  for i = 1, #f.subHeaders do Widgets.HideHeader(f.subHeaders[i]) end
   for i = 1, #f.rows do f.rows[i]:SetShown(false) end
   local h = yOff + topPad + f.note:GetStringHeight() + 14
   f:SetHeight(h); return h
@@ -345,12 +346,12 @@ local function refresh(f, ctx)
 
   -- The "Browse by era" section header was removed by design; the era nav is
   -- centered beneath the list instead. f.browseHeader stays hidden.
-  S.hideHeader(f.browseHeader)
+  Widgets.HideHeader(f.browseHeader)
 
   -- Not linked: a single prompt — nothing to browse or feature yet.
   if not partnerLinked() then
     return fullPageNote(f, colW,
-      "|cff808080Pair with your partner to start collecting the achievements you've earned together.|r", 10)
+      "|cff808080" .. L["Pair with your partner to start collecting the achievements you've earned together."] .. "|r", 10)
   end
 
   -- Our own achievements are scanned across frames (the full DB is large), so the
@@ -360,7 +361,7 @@ local function refresh(f, ctx)
   if not ns.db.demoMode and not ns.AchvSync.Ready() then
     ns.AchvSync.Ensure(function() if ns.Dashboard then ns.Dashboard.Refresh() end end)
     return fullPageNote(f, colW,
-      "|cffd0d0d0Gathering your achievements…|r\n|cff808080This only takes a moment the first time you open it.|r", 18)
+      "|cffd0d0d0" .. L["Gathering your achievements…"] .. "|r\n|cff808080" .. L["This only takes a moment the first time you open it."] .. "|r", 18)
   end
 
   viewEra = viewEra or defaultEra()
@@ -386,13 +387,13 @@ local function refresh(f, ctx)
   -- navigation uses the inline "Syncing…" note instead of blanking the page.
   if not ns.db.demoMode and not next(ns.state.partner.achv or {}) then
     return fullPageNote(f, colW,
-      "|cffd0d0d0Gathering the achievements you've earned together…|r\n|cff808080This can take a few seconds the first time you open it.|r", 18)
+      "|cffd0d0d0" .. L["Gathering the achievements you've earned together…"] .. "|r\n|cff808080" .. L["This can take a few seconds the first time you open it."] .. "|r", 18)
   end
 
   -- MEMORIES TOGETHER (top) --------------------------------------------------
   f.featHeader.label:ClearAllPoints(); f.featHeader.label:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-  S.styleHeader(f.featHeader, "Memories together", colW)
-  yOff = yOff + S.HEADER_H
+  Widgets.StyleHeader(f.featHeader, L["Memories together"], colW)
+  yOff = yOff + Theme.HEADER_H
 
   local feats = selectFeaturedMemories(allMatches())
   if #feats > 0 then
@@ -404,7 +405,7 @@ local function refresh(f, ctx)
       local m = fm.m
       c:Show(); c:SetWidth(colW)
       c:ClearAllPoints(); c:SetPoint("TOPLEFT", f, "TOPLEFT", -1, -yOff)
-      c.chip.icon:SetTexture(m.icon or S.I_BOSS); c.chip.icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+      c.chip.icon:SetTexture(m.icon or Theme.I_BOSS); c.chip.icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
       c.tag:SetText(fm.tag)
       c.name:SetText(m.name); c.name:SetWidth(colW - 170)
       c.date:SetText(fmtDate(m))
@@ -419,8 +420,8 @@ local function refresh(f, ctx)
     f.note:SetWidth(colW - 6)
     local loading = not ns.db.demoMode and not (ns.state.partner and ns.state.partner.achv)
     f.note:SetText(loading
-      and "|cff808080Looking back through your shared history…|r"
-      or "|cff808080No achievements earned on the same day yet — go make some memories together!|r")
+      and "|cff808080" .. L["Looking back through your shared history…"] .. "|r"
+      or "|cff808080" .. L["No achievements earned on the same day yet — go make some memories together!"] .. "|r")
     yOff = yOff + 10 + f.note:GetStringHeight() + 8
   end
   for i = ci + 1, #f.cards do f.cards[i]:Hide() end
@@ -437,8 +438,8 @@ local function refresh(f, ctx)
     hi = hi + 1
     local hd = ensureSubHeader(f, hi)
     hd.label:ClearAllPoints(); hd.label:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -yOff)
-    S.styleHeader(hd, title, colW)
-    yOff = yOff + S.HEADER_H + 8
+    Widgets.StyleHeader(hd, title, colW)
+    yOff = yOff + Theme.HEADER_H + 8
     table.sort(list, function(a, b) return dateCode(a) > dateCode(b) end)
     local status = (kind == "both" and "both") or "partnerOnly"
     local n = cap and math.min(#list, cap) or #list
@@ -447,7 +448,7 @@ local function refresh(f, ctx)
       ri = ri + 1
       local r = ensureRow(f, ri)
       local name, _, _, icon = resolve(a)
-      r:SetShown(true); r:SetWidth(colW); r:SetIcon(icon or S.I_BOSS)
+      r:SetShown(true); r:SetWidth(colW); r:SetIcon(icon or Theme.I_BOSS)
       local value = (kind == "both") and ("|cff44ff44" .. fmtDate(a) .. "|r") or ("|cffa0a0a0" .. fmtDate(a) .. "|r")
       r:Set(name, value)
       local ad = rowDetail(a, status)
@@ -463,16 +464,16 @@ local function refresh(f, ctx)
   if not ns.db.demoMode and partnerEra(viewEra) == nil then
     f.note2:Show(); f.note2:ClearAllPoints(); f.note2:SetPoint("TOPLEFT", f, "TOPLEFT", 3, -yOff)
     f.note2:SetWidth(colW - 6)
-    f.note2:SetText("|cff808080Syncing " .. ns.AchvSync.EraName(viewEra) .. " achievements…|r")
+    f.note2:SetText("|cff808080" .. L["Syncing "] .. ns.AchvSync.EraName(viewEra) .. L[" achievements…"] .. "|r")
     yOff = yOff + 10 + f.note2:GetStringHeight() + (SEC_GAP - 10)
   else
-    local togCount = #both > TOGETHER_CAP and (TOGETHER_CAP .. " of " .. #both) or tostring(#both)
-    section("Earned together  |cff707070(" .. togCount .. ")|r", both, "both", TOGETHER_CAP)
-    section("Partner earned  |cff707070(" .. #partnerOnly .. ")|r", partnerOnly, "partner")
+    local togCount = #both > TOGETHER_CAP and (TOGETHER_CAP .. L[" of "] .. #both) or tostring(#both)
+    section(L["Earned together"] .. "  |cff707070(" .. togCount .. ")|r", both, "both", TOGETHER_CAP)
+    section(L["Partner earned"] .. "  |cff707070(" .. #partnerOnly .. ")|r", partnerOnly, "partner")
     if #both == 0 and #partnerOnly == 0 then
       f.note2:Show(); f.note2:ClearAllPoints(); f.note2:SetPoint("TOPLEFT", f, "TOPLEFT", 3, -yOff)
       f.note2:SetWidth(colW - 6)
-      f.note2:SetText("|cff808080No shared achievements in this era yet.|r")
+      f.note2:SetText("|cff808080" .. L["No shared achievements in this era yet."] .. "|r")
       yOff = yOff + 10 + f.note2:GetStringHeight() + (SEC_GAP - 10)
     else
       f.note2:Hide()
@@ -485,7 +486,7 @@ local function refresh(f, ctx)
   f.prev:Show(); f.next:Show(); f.eraLabel:Show()
   f.prev:SetEnabledLook(idx < #order)   -- older exists
   f.next:SetEnabledLook(idx > 1)        -- newer exists
-  f.eraLabel:SetText(ns.AchvSync.EraName(viewEra) .. "   |cff707070(" .. #both .. " together)|r")
+  f.eraLabel:SetText(ns.AchvSync.EraName(viewEra) .. "   |cff707070(" .. #both .. L[" together)"] .. "|r")
   local lw = f.eraLabel:GetStringWidth() or 120
   local total = 26 + 10 + lw + 10 + 26
   local startX = math.max(0, math.floor((colW - total) / 2))
@@ -494,7 +495,7 @@ local function refresh(f, ctx)
   f.next:ClearAllPoints(); f.next:SetPoint("LEFT", f.eraLabel, "RIGHT", 10, 0)
   yOff = yOff + 26 + 8
 
-  for i = hi + 1, #f.subHeaders do S.hideHeader(f.subHeaders[i]) end
+  for i = hi + 1, #f.subHeaders do Widgets.HideHeader(f.subHeaders[i]) end
   for i = ri + 1, #f.rows do f.rows[i]:SetShown(false) end
 
   local h = yOff + 14
@@ -502,8 +503,8 @@ local function refresh(f, ctx)
 end
 
 ns.Dashboard.RegisterPage({
-  key = "achievements", label = "Together", order = 3, detail = true,
-  detailTitle = "Achievement", detailHint = "Hover or click an achievement to see it here.",
+  key = "achievements", label = L["Together"], order = 3, detail = true,
+  detailTitle = L["Achievement"], detailHint = L["Hover or click an achievement to see it here."],
   build = build, refresh = refresh,
   onShow = function()
     detail.unlock()

@@ -17,6 +17,9 @@ local addonName, ns = ...
 local Comm = {}
 ns.Comm = Comm
 
+-- Hot-path global, localized for the throttle/debounce timers below.
+local GetTime = GetTime
+
 local MSG = {
   HELLO = "HELLO", SNAP = "SNAP", CARD = "CARD", REQ = "REQ", BYE = "BYE",
   STATS = "STATS",
@@ -36,13 +39,6 @@ Comm.selftest = false
 -- ---------------------------------------------------------------------------
 -- Targeting
 -- ---------------------------------------------------------------------------
-local function selfFullName()
-  local n = UnitName("player")
-  local r = GetNormalizedRealmName and GetNormalizedRealmName()
-  if r and r ~= "" then return n .. "-" .. r end
-  return n
-end
-
 -- Where do bonded SNAP/HELLO/CARD go? To the bonded partner over whisper.
 local function partnerTarget()
   return ns.Pairing and ns.Pairing.PartnerName()
@@ -59,7 +55,7 @@ local function rawSend(entry)
   if not (C_ChatInfo and C_ChatInfo.SendAddonMessage) then return false end
   local channel, target = ns.CHANNEL, entry.target
   if Comm.selftest then
-    channel, target = "WHISPER", selfFullName()
+    channel, target = "WHISPER", ns.Util.MyFullName()
   elseif target then
     channel = "WHISPER"
   end
@@ -119,6 +115,8 @@ local function send(text)
 end
 
 -- Public: send a raw whisper to an arbitrary name (used by Pairing for invites).
+--- @param name string Target character ("Name-Realm").
+--- @param text string Message body (already prefixed with its MSG type).
 function Comm.WhisperTo(name, text)
   enqueue(text, name)
 end
@@ -156,6 +154,7 @@ local function doSendCard()
 end
 
 -- force=true sends even if unchanged (handshake / explicit request).
+--- @param force boolean|nil Send even when the snapshot signature is unchanged.
 function Comm.QueueSnapshot(force)
   ns.SelfState.Update()
   local sig = ns.SelfState.SnapSignature()
@@ -493,11 +492,9 @@ end
 
 local function onAddonMessage(_, prefix, text, channel, sender)
   if prefix ~= ns.PREFIX then return end
-  local me = UnitName("player")
-  local senderShort = sender and sender:match("^[^-]+") or sender
-  if senderShort == me then
-    if not Comm.selftest then return end   -- ignore our own echoes (except self-test)
-  end
+  local senderShort = ns.Util.ShortName(sender)
+  -- Ignore our own echoes (except during self-test, which whispers ourselves).
+  if ns.Util.IsSelf(sender) and not Comm.selftest then return end
   dispatch(text, senderShort, false)
 end
 

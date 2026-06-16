@@ -6,9 +6,12 @@
 
 local addonName, ns = ...
 local S = ns.UI.Shared
+local Theme = ns.UI.Theme
+local Widgets = ns.UI.Widgets
 local Row = ns.UI.Row
+local L = ns.L
 
-local SECTION_GAP = 24
+local SECTION_GAP = Theme.SECTION_GAP
 local TILE_H = 116
 local COL_GUTTER = 28
 
@@ -16,18 +19,18 @@ local function fmtNum(n) return BreakUpLargeNumbers and BreakUpLargeNumbers(n or
 
 -- Big shared tiles (max-merged "together" totals).
 local TILE_DEFS = {
-  { key = "bosses",   icon = S.I_BOSS,    label = "Bosses",        time = false },
-  { key = "dungeons", icon = S.I_DUNGEON, label = "Dungeons",      time = false },
-  { key = "mplus",    icon = S.I_KEY,     label = "Mythic+",       time = false },
-  { key = "togetherTime", icon = S.I_TIME, label = "Time Together", time = true },
+  { key = "bosses",   icon = Theme.I_BOSS,    label = L["Bosses"],        time = false },
+  { key = "dungeons", icon = Theme.I_DUNGEON, label = L["Dungeons"],      time = false },
+  { key = "mplus",    icon = Theme.I_KEY,     label = L["Mythic+"],       time = false },
+  { key = "togetherTime", icon = Theme.I_TIME, label = L["Time Together"], time = true },
 }
 
 -- You-vs-Partner compare rows. own[key] / partner[key] shown side by side.
 local COMPARE_DEFS = {
-  { key = "quests",       icon = S.I_QUEST, label = "Quests" },
-  { key = "deaths",       icon = S.I_DEATH, label = "Deaths" },
-  { key = "mobs",         icon = S.I_MOB,   label = "Mobs slain" },
-  { key = "levels",       icon = S.I_DUNGEON, label = "Levels gained" },
+  { key = "quests",       icon = Theme.I_QUEST, label = L["Quests"] },
+  { key = "deaths",       icon = Theme.I_DEATH, label = L["Deaths"] },
+  { key = "mobs",         icon = Theme.I_MOB,   label = L["Mobs slain"] },
+  { key = "levels",       icon = Theme.I_DUNGEON, label = L["Levels gained"] },
 }
 
 -- ---------------------------------------------------------------------------
@@ -60,8 +63,8 @@ local function computeRecords(own, partner, shared)
   end
 
   local rows = {
-    { icon = S.I_TIME, label = "Together since", value = sinceVal },
-    { icon = S.I_KEY,  label = "Best key",
+    { icon = Theme.I_TIME, label = L["Together since"], value = sinceVal },
+    { icon = Theme.I_KEY,  label = L["Best key"],
       value = bestKey > 0 and ("|cffa335ee+" .. bestKey .. "|r") or "—" },
   }
 
@@ -82,18 +85,17 @@ local function build(host)
   local ff = GameFontHighlight:GetFont()
 
   -- tiles
-  f.tHeader = S.makeSectionHeader(f)
+  f.tHeader = Widgets.SectionHeader(f)
   f.tiles = {}
   for _, def in ipairs(TILE_DEFS) do
     local t = CreateFrame("Frame", nil, f, "BackdropTemplate"); t:SetHeight(TILE_H)
-    t:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8",
-      edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
+    t:SetBackdrop(Theme.BACKDROP_HAIRLINE)
     t:SetBackdropColor(0.09, 0.095, 0.12, 0.85)
-    t:SetBackdropBorderColor(S.GOLD[1] * 0.5, S.GOLD[2] * 0.5, S.GOLD[3] * 0.5, 0.6)
+    t:SetBackdropBorderColor(Theme.GOLD[1] * 0.5, Theme.GOLD[2] * 0.5, Theme.GOLD[3] * 0.5, 0.6)
     t.chip = Row.MakeChip(t, 36, def.icon); t.chip:SetPoint("TOP", t, "TOP", 0, -12)
     t.num = t:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge"); t.num:SetPoint("TOP", t.chip, "BOTTOM", 0, -8)
     if ff then t.num:SetFont(ff, 26) end
-    t.num:SetTextColor(S.CREAM[1], S.CREAM[2], S.CREAM[3])
+    t.num:SetTextColor(Theme.CREAM[1], Theme.CREAM[2], Theme.CREAM[3])
     t.lbl = t:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); t.lbl:SetPoint("TOP", t.num, "BOTTOM", 0, -4)
     t.lbl:SetText(def.label); t.lbl:SetTextColor(0.75, 0.72, 0.6)
     -- subtle hover glow
@@ -103,7 +105,7 @@ local function build(host)
   end
 
   -- left column: compare rows
-  f.cHeader = S.makeSectionHeader(f)
+  f.cHeader = Widgets.SectionHeader(f)
   f.cRows = {}
   for i, def in ipairs(COMPARE_DEFS) do
     local r = Row.CreateInfo(f, def.icon)
@@ -111,21 +113,21 @@ local function build(host)
   end
 
   -- right column: records + recent M+ history
-  f.rHeader = S.makeSectionHeader(f)
+  f.rHeader = Widgets.SectionHeader(f)
   f.rRows = {}
   for i = 1, 8 do
-    local r = Row.CreateInfo(f, S.I_KEY)
+    local r = Row.CreateInfo(f, Theme.I_KEY)
     f.rRows[i] = r
   end
-  f.hHeader = S.makeSectionHeader(f)
-  f.hRows = {}; for i = 1, 8 do f.hRows[i] = Row.CreateInfo(f, S.I_KEY) end
-  f.hEmpty = S.makeSubText(f)
+  f.hHeader = Widgets.SectionHeader(f)
+  f.hRows = {}; for i = 1, 8 do f.hRows[i] = Row.CreateInfo(f, Theme.I_KEY) end
+  f.hEmpty = Widgets.SubText(f)
   return f
 end
 
 local function compareVal(you, partner)
-  return "|cffffffffYou " .. fmtNum(you) .. "|r    |cffa0a0a0Partner " .. fmtNum(partner) ..
-    "|r    |cff44ff44Total " .. fmtNum((you or 0) + (partner or 0)) .. "|r"
+  return "|cffffffff" .. L["You "] .. fmtNum(you) .. "|r    |cffa0a0a0" .. L["Partner "] .. fmtNum(partner) ..
+    "|r    |cff44ff44" .. L["Total "] .. fmtNum((you or 0) + (partner or 0)) .. "|r"
 end
 
 -- Lay out a stack of pooled rows beneath an anchor; returns (lastAnchor, height).
@@ -140,7 +142,7 @@ local function stackRows(rows, n, headerDiamond, colW)
   end
   for i = n + 1, #rows do rows[i]:SetShown(false) end
   local h = (n > 0) and (8 + n * Row.HEIGHT + (n - 1) * 3) or 0
-  return anchor, S.HEADER_H + h
+  return anchor, Theme.HEADER_H + h
 end
 
 -- ---------------------------------------------------------------------------
@@ -158,7 +160,7 @@ local function refresh(f, ctx)
 
   -- tiles (full width)
   f.tHeader.label:ClearAllPoints(); f.tHeader.label:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-  S.styleHeader(f.tHeader, "Adventured Together", W)
+  Widgets.StyleHeader(f.tHeader, L["Adventured Together"], W)
   local gap = 14
   local tileW = math.floor((W - (#TILE_DEFS - 1) * gap) / #TILE_DEFS)
   local x = 0
@@ -173,7 +175,7 @@ local function refresh(f, ctx)
 
   -- LEFT: You vs Partner
   f.cHeader.label:ClearAllPoints(); f.cHeader.label:SetPoint("TOPLEFT", tileAnchor, "BOTTOMLEFT", 3, -SECTION_GAP)
-  S.styleHeader(f.cHeader, "You vs Partner", leftW)
+  Widgets.StyleHeader(f.cHeader, L["You vs Partner"], leftW)
   for i, def in ipairs(COMPARE_DEFS) do
     local r = f.cRows[i]
     r:SetIcon(def.icon)
@@ -183,28 +185,28 @@ local function refresh(f, ctx)
 
   -- RIGHT (top): Records
   f.rHeader.label:ClearAllPoints(); f.rHeader.label:SetPoint("TOPLEFT", tileAnchor, "BOTTOMLEFT", 3 + rightX, -SECTION_GAP)
-  S.styleHeader(f.rHeader, "Records", rightW)
+  Widgets.StyleHeader(f.rHeader, L["Records"], rightW)
   local recs = computeRecords(own, partner, shared)
   local nRec = math.min(#recs, #f.rRows)
   for i = 1, nRec do
     local d = recs[i]
     local r = f.rRows[i]
-    r:SetIcon(d.icon or S.I_KEY); r:Set(d.label, d.value)
+    r:SetIcon(d.icon or Theme.I_KEY); r:Set(d.label, d.value)
   end
   local _, recH = stackRows(f.rRows, nRec, f.rHeader.diamond, rightW)
 
   -- RIGHT (below records): Recent Mythic+
   f.hHeader.label:ClearAllPoints(); f.hHeader.label:SetPoint("TOPLEFT", f.rHeader.label, "TOPLEFT", 0, -(recH + SECTION_GAP))
-  S.styleHeader(f.hHeader, "Recent Mythic+", rightW)
+  Widgets.StyleHeader(f.hHeader, L["Recent Mythic+"], rightW)
   local runs = own.mplusRuns or {}
   local n = math.min(#runs, 8)
   local hAnchor = f.hHeader.diamond
   for i = 1, n do
     local rr = runs[i]
     local r = f.hRows[i]
-    r:SetShown(true); r:SetWidth(rightW); r:SetIcon(S.I_KEY)
-    r:Set("|cffa335ee+" .. (rr.level or 0) .. "|r  " .. (rr.map and tostring(rr.map) or "Dungeon"),
-      rr.onTime and "|cff44ff44timed|r" or "|cffff5555over time|r")
+    r:SetShown(true); r:SetWidth(rightW); r:SetIcon(Theme.I_KEY)
+    r:Set("|cffa335ee+" .. (rr.level or 0) .. "|r  " .. (rr.map and tostring(rr.map) or L["Dungeon"]),
+      rr.onTime and ("|cff44ff44" .. L["timed"] .. "|r") or ("|cffff5555" .. L["over time"] .. "|r"))
     r.frame:ClearAllPoints()
     r.frame:SetPoint("TOPLEFT", hAnchor, "BOTTOMLEFT", i == 1 and -3 or 0, i == 1 and -8 or -3)
     hAnchor = r.frame
@@ -213,18 +215,18 @@ local function refresh(f, ctx)
   local histH
   if n == 0 then
     f.hEmpty:Show(); f.hEmpty:ClearAllPoints(); f.hEmpty:SetPoint("TOPLEFT", f.hHeader.diamond, "BOTTOMLEFT", -3, -10)
-    f.hEmpty:SetText("No Mythic+ runs together yet.")
-    histH = S.HEADER_H + 10 + f.hEmpty:GetStringHeight()
+    f.hEmpty:SetText(L["No Mythic+ runs together yet."])
+    histH = Theme.HEADER_H + 10 + f.hEmpty:GetStringHeight()
   else
     f.hEmpty:Hide()
-    histH = S.HEADER_H + 8 + n * Row.HEIGHT + (n - 1) * 3
+    histH = Theme.HEADER_H + 8 + n * Row.HEIGHT + (n - 1) * 3
   end
   local rightH = recH + SECTION_GAP + histH
 
   -- page height = tiles block + tallest column
-  local h = S.HEADER_H + 10 + TILE_H + SECTION_GAP + math.max(leftH, rightH) + 14
+  local h = Theme.HEADER_H + 10 + TILE_H + SECTION_GAP + math.max(leftH, rightH) + 14
   f:SetHeight(h)
   return h
 end
 
-ns.Dashboard.RegisterPage({ key = "statistics", label = "Statistics", order = 2, build = build, refresh = refresh })
+ns.Dashboard.RegisterPage({ key = "statistics", label = L["Statistics"], order = 2, build = build, refresh = refresh })

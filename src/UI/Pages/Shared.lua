@@ -1,6 +1,9 @@
 --[[ UI/Pages/Shared.lua
-  Shared UI constants, helpers, section-header widget, content builders, and demo
-  fixtures used by the tab shell and all pages. (ns.UI.Shared)
+  Page composition + data formatting shared by the tab shell and all pages
+  (ns.UI.Shared). Look/feel constants live in ns.UI.Theme; reusable frames in
+  ns.UI.Widgets — this file is the layer above them: formatters, readiness-row
+  population, content builders, the generic info/row page templates, the detail-pane
+  pin controller, and the demo fixtures.
 ]]
 
 local addonName, ns = ...
@@ -9,79 +12,17 @@ ns.UI = ns.UI or {}
 local S = {}
 ns.UI.Shared = S
 
--- Palette (Plumber-ish warm gold + cream)
-S.GOLD  = { 0.83, 0.67, 0.33 }
-S.CREAM = { 0.96, 0.90, 0.74 }
-
-S.INDICATOR = {
-  ready = "Interface\\COMMON\\Indicator-Green", amber = "Interface\\COMMON\\Indicator-Yellow",
-  red   = "Interface\\COMMON\\Indicator-Red",   wait  = "Interface\\COMMON\\Indicator-Gray",
-}
-S.VERDICT_RGB = {
-  ready = { 0.30, 0.85, 0.40 }, amber = { 0.98, 0.78, 0.20 },
-  red   = { 0.95, 0.32, 0.32 }, wait  = { 0.70, 0.70, 0.72 },
-}
-S.VERDICT_LABEL = { ready = "READY", amber = "CHECK", red = "NOT READY", wait = "WAITING" }
-
-S.ICON = {
-  durability = "Interface\\Icons\\Trade_BlackSmithing",
-  flask      = "Interface\\Icons\\INV_Potion_97",
-  food       = "Interface\\Icons\\INV_Misc_Food_15",
-  wpn        = "Interface\\Icons\\INV_Stone_SharpeningStone_05",
-  rune       = "Interface\\Icons\\INV_Misc_Rune_01",
-  bags       = "Interface\\Icons\\INV_Misc_Bag_08",
-}
-S.I_KEY   = "Interface\\Icons\\INV_Relics_Hourglass"
-S.I_VAULT = "Interface\\Icons\\INV_Misc_Treasurechest_Battered"
-S.I_LOC   = "Interface\\Icons\\INV_Misc_Map02"
-S.I_COORDS = "Interface\\Icons\\INV_Misc_Map_01"
-S.I_GOLD  = "Interface\\MoneyFrame\\UI-GoldIcon"
-S.I_GEAR  = "Interface\\Icons\\Trade_Engineering"
-S.I_SUP   = "Interface\\Icons\\INV_Potion_54"
--- Crisp atlas "?" quest marker (vector-sharp at any chip size). The old
--- Interface\GossipFrame\ActiveQuestIcon is a tiny low-res texture that looked
--- blurry/pixelated blown up in our chips, so prefer a high-res atlas and only
--- fall back to that file on clients that lack one.
-S.I_QUEST = "Interface\\GossipFrame\\ActiveQuestIcon"
-do
-  local info = C_Texture and C_Texture.GetAtlasInfo
-  for _, a in ipairs({ "QuestTurnin", "Quest-Important-TurnIn", "quest-recipe-turnin" }) do
-    if info and info(a) then S.I_QUEST = a; break end
-  end
-end
-S.I_BOSS  = "Interface\\Icons\\Achievement_Boss_Ragnaros"
-S.I_DUNGEON = "Interface\\Icons\\Achievement_ChallengeMode_Gold"
-S.I_DEATH = "Interface\\Icons\\Ability_Rogue_FeignDeath"
-S.I_TIME  = "Interface\\Icons\\INV_Misc_PocketWatch_01"
-S.I_MOB   = "Interface\\Icons\\Ability_DualWield"
-
-S.CLASS_CIRCLES = "Interface\\TargetingFrame\\UI-Classes-Circles"
-S.HEADER_H = 18 + 6 + 8
-
--- Subheader / descriptive sub-text shown beneath a section header. Centralised
--- here so every page renders sub-text at the SAME size + colour (pages used to
--- pick their own — 12 on Achievements, 13 on Partners, 14 on Statistics).
-S.SUBHEADER_SIZE  = 13
-S.SUBHEADER_COLOR = { 0.5, 0.5, 0.5 }   -- matches the |cff808080| muted note grey used across pages
-S.SUBHEADER_GAP   = 10   -- padding between the header's rule and its sub-text
-
--- Standalone muted sub-text (empty-state lines, inline notes) that isn't owned
--- by a header. Same font as a header's built-in sub so the two never clash.
-function S.makeSubText(parent)
-  local fs = parent:CreateFontString(nil, "OVERLAY")
-  local ff = GameFontHighlight:GetFont()
-  if ff then fs:SetFont(ff, S.SUBHEADER_SIZE, "") end
-  fs:SetTextColor(S.SUBHEADER_COLOR[1], S.SUBHEADER_COLOR[2], S.SUBHEADER_COLOR[3])
-  fs:SetJustifyH("LEFT"); fs:SetJustifyV("TOP")
-  return fs
-end
+local Theme = ns.UI.Theme
+local Widgets = ns.UI.Widgets
 
 -- ---------------------------------------------------------------------------
--- Helpers
+-- Formatters
 -- ---------------------------------------------------------------------------
-function S.atlasExists(name)
-  return C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(name) ~= nil
-end
+--- Class colour as r,g,b (falls back to a neutral grey for unknown classes).
+--- @param cls string|nil Class token (e.g. "PALADIN").
+--- @return number r
+--- @return number g
+--- @return number b
 function S.classColor(cls)
   if C_ClassColor and C_ClassColor.GetClassColor and cls and cls ~= "" then
     local c = C_ClassColor.GetClassColor(cls); if c then return c.r, c.g, c.b end
@@ -90,43 +31,40 @@ function S.classColor(cls)
   if c then return c.r, c.g, c.b end
   return 0.8, 0.8, 0.82
 end
+
+--- Colour-escape prefix (|cffRRGGBB) for an r,g,b triple.
+--- @return string escape
 function S.hex(r, g, b) return string.format("|cff%02x%02x%02x", r * 255, g * 255, b * 255) end
--- Apply art to a texture, transparently handling atlas names (crisp at any size)
--- and file paths / fileIDs alike. File icons get a slight crop to hide their baked
--- border; atlas art is shown whole. Used so the quest "?" and friends can be
--- swapped to sharp atlas art without every call site caring which kind it is.
-function S.applyIcon(tex, art, crop)
-  if type(art) == "string" and not art:find("\\") and S.atlasExists(art) then
-    tex:SetTexCoord(0, 1, 0, 1); tex:SetAtlas(art)
-  else
-    tex:SetTexture(art)
-    if crop == false then tex:SetTexCoord(0, 1, 0, 1) else tex:SetTexCoord(0.1, 0.9, 0.1, 0.9) end
-  end
-end
--- Inline texture for fontstrings. yOff nudges it down to sit on the text baseline.
--- Atlas names use the |A| escape (crisp); file paths use |T|.
-function S.inlineIcon(p, sz, yoff)
-  sz = sz or 14; yoff = yoff or -3
-  if type(p) == "string" and not p:find("\\") and S.atlasExists(p) then
-    return "|A:" .. p .. ":" .. sz .. ":" .. sz .. ":0:" .. yoff .. "|a "
-  end
-  return "|T" .. p .. ":" .. sz .. ":" .. sz .. ":0:" .. yoff .. "|t "
-end
+
+--- Localized class display name for a class token.
+--- @param cls string|nil
+--- @return string
 function S.classDisplayName(cls)
   if cls and LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[cls] then return LOCALIZED_CLASS_NAMES_MALE[cls] end
   return cls or ""
 end
+
+--- Spec name + role for a specialization id.
+--- @param specID number|nil
+--- @return string name
+--- @return string|nil role
 function S.specInfo(specID)
   if not specID or specID == 0 then return "", nil end
   local _, name, _, _, role = GetSpecializationInfoByID(specID)
   return name or "", role
 end
+
+--- Tiny role-icon atlas for TANK/HEALER/DAMAGER (nil if unavailable).
+--- @param role string|nil
+--- @return string|nil atlas
 function S.roleAtlas(role)
   local a = role and ({ TANK = "roleicon-tiny-tank", HEALER = "roleicon-tiny-healer", DAMAGER = "roleicon-tiny-dps" })[role]
-  if a and S.atlasExists(a) then return a end
+  if a and Theme.AtlasExists(a) then return a end
   return nil
 end
--- Which unit token is our partner (for the live 3D model)?
+
+--- Which unit token is our partner (for the live 3D model)?
+--- @return string|nil unit "player"/"partyN" or nil.
 function S.partnerUnit()
   if ns.db.demoMode or (ns.Comm and ns.Comm.selftest) then return "player" end
   local name = ns.state.partnerName
@@ -138,11 +76,18 @@ function S.partnerUnit()
   return nil
 end
 
+--- Format a gold amount with the trailing gold glyph.
+--- @param g number
+--- @return string
 function S.fmtGold(g)
   local n = BreakUpLargeNumbers and BreakUpLargeNumbers(g) or tostring(g)
   return "|cffffffff" .. n .. "|r|cffffd100g|r"
 end
--- Truncate the MIDDLE of a string (keeps head + tail) so prefixes/suffixes survive.
+
+--- Truncate the MIDDLE of a string (keeps head + tail) so prefixes/suffixes survive.
+--- @param s string|nil
+--- @param max number
+--- @return string
 function S.midTruncate(s, max)
   if not s then return "" end
   local n = #s
@@ -153,6 +98,9 @@ function S.midTruncate(s, max)
   return s:sub(1, head) .. "…" .. s:sub(n - tail + 1)
 end
 
+--- Format a duration (seconds) as a compact "Xh Ym" / "Ym" / "Zs".
+--- @param sec number|nil
+--- @return string
 function S.fmtTime(sec)
   sec = math.floor(sec or 0)
   local h = math.floor(sec / 3600)
@@ -163,73 +111,22 @@ function S.fmtTime(sec)
 end
 
 -- ---------------------------------------------------------------------------
--- Section header (cream label + gold diamond + right-fading gold rule)
--- ---------------------------------------------------------------------------
-function S.makeSectionHeader(parent)
-  local label = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  local ff = GameFontHighlight:GetFont()
-  if ff then label:SetFont(ff, 17) end
-  label:SetTextColor(S.CREAM[1], S.CREAM[2], S.CREAM[3])
-  local diamond = parent:CreateTexture(nil, "ARTWORK")
-  diamond:SetSize(7, 7); diamond:SetTexture("Interface\\Buttons\\WHITE8X8")
-  diamond:SetVertexColor(S.GOLD[1], S.GOLD[2], S.GOLD[3]); diamond:SetRotation(math.rad(45))
-  local line = parent:CreateTexture(nil, "ARTWORK")
-  line:SetHeight(2); line:SetColorTexture(1, 1, 1, 1)
-  if CreateColor then
-    line:SetGradient("HORIZONTAL", CreateColor(S.GOLD[1], S.GOLD[2], S.GOLD[3], 0.8), CreateColor(S.GOLD[1], S.GOLD[2], S.GOLD[3], 0.0))
-  else
-    line:SetVertexColor(S.GOLD[1], S.GOLD[2], S.GOLD[3], 0.5)
-  end
-  local sub = S.makeSubText(parent); sub:Hide()   -- optional descriptive line under the rule
-  return { label = label, diamond = diamond, line = line, sub = sub }
-end
-
-function S.hideHeader(h)
-  h.label:Hide(); h.diamond:Hide(); h.line:Hide()
-  if h.sub then h.sub:Hide() end
-end
-
--- Style a header (caller has already positioned h.label's TOPLEFT). Anchors the
--- diamond + line beneath the label and sizes the line to colW. Pass `subtext` to
--- render a descriptive sub-line beneath the rule (aligned to the label, x=0);
--- omit/"" to hide it. Use S.subHeight(h) to learn how far the sub extends below
--- the rule when laying out the content that follows.
-function S.styleHeader(h, title, colW, subtext)
-  h.label:SetText(title); h.label:Show()
-  h.diamond:Show(); h.diamond:ClearAllPoints(); h.diamond:SetPoint("TOPLEFT", h.label, "BOTTOMLEFT", 3, -6)
-  h.line:Show(); h.line:ClearAllPoints(); h.line:SetPoint("LEFT", h.diamond, "RIGHT", 6, 0); h.line:SetWidth(colW - 16)
-  if h.sub then
-    if subtext and subtext ~= "" then
-      h.sub:Show(); h.sub:SetWidth(colW)
-      h.sub:ClearAllPoints()
-      h.sub:SetPoint("TOPLEFT", h.diamond, "BOTTOMLEFT", -3, -S.SUBHEADER_GAP)
-      h.sub:SetText(subtext)
-    else
-      h.sub:Hide()
-    end
-  end
-end
-
--- Vertical space the header's sub-text occupies below the rule (0 when hidden).
--- Add this to S.HEADER_H to find where the next content row should start.
-function S.subHeight(h)
-  if h.sub and h.sub:IsShown() then return S.SUBHEADER_GAP + h.sub:GetStringHeight() end
-  return 0
-end
-
--- ---------------------------------------------------------------------------
 -- Readiness row values
 -- ---------------------------------------------------------------------------
+--- Populate a keyed table of readiness rows from a snapshot (respects db.show).
+--- @param rows table Map of rowKey -> Row object.
+--- @param snap table Partner snapshot.
 function S.setRowValues(rows, snap)
+  local L = ns.L
   local db = ns.db
   local function set(key, ...) if db.show[key] and rows[key] then rows[key]:Set(...) end end
   local slot = snap.durSlot and ns.Snapshot.SLOT_NAMES[snap.durSlot]
-  set("durability", "Repairs" .. (slot and (" |cff808080" .. slot .. "|r") or ""), (snap.dur or 0) .. "%", (snap.dur or 100) >= db.thresholds.durability)
-  set("flask", "Flask", snap.flask and "active" or "missing", snap.flask)
-  set("food", "Food buff", snap.food and "active" or "missing", snap.food)
-  set("wpn", "Weapon oil", snap.wpn and "active" or "missing", snap.wpn)
-  set("rune", "Aug rune", snap.rune and "active" or "missing", snap.rune)
-  set("bags", "Bag space", (snap.bags or 0) .. " free", (snap.bags or 0) > 0)
+  set("durability", L["Repairs"] .. (slot and (" |cff808080" .. slot .. "|r") or ""), (snap.dur or 0) .. "%", (snap.dur or 100) >= db.thresholds.durability)
+  set("flask", L["Flask"], snap.flask and L["active"] or L["missing"], snap.flask)
+  set("food", L["Food buff"], snap.food and L["active"] or L["missing"], snap.food)
+  set("wpn", L["Weapon oil"], snap.wpn and L["active"] or L["missing"], snap.wpn)
+  set("rune", L["Aug rune"], snap.rune and L["active"] or L["missing"], snap.rune)
+  set("bags", L["Bag space"], (snap.bags or 0) .. L[" free"], (snap.bags or 0) > 0)
 end
 
 -- ---------------------------------------------------------------------------
@@ -238,19 +135,19 @@ end
 function S.cActivity(snap)
   local t = {}
   if (snap.key or "") ~= "" and (snap.klvl or 0) > 0 then
-    table.insert(t, S.inlineIcon(S.I_KEY) .. "|cffa335ee" .. snap.key .. " +" .. snap.klvl .. "|r")
+    table.insert(t, Theme.InlineIcon(Theme.I_KEY) .. "|cffa335ee" .. snap.key .. " +" .. snap.klvl .. "|r")
   end
   if ((snap.vm or 0) + (snap.vr or 0) + (snap.vw or 0)) > 0 then
-    table.insert(t, S.inlineIcon(S.I_VAULT) .. "Vault  |cffffffffM+ " .. (snap.vm or 0) .. "/3   Raid " .. (snap.vr or 0) .. "/3|r")
+    table.insert(t, Theme.InlineIcon(Theme.I_VAULT) .. "Vault  |cffffffffM+ " .. (snap.vm or 0) .. "/3   Raid " .. (snap.vr or 0) .. "/3|r")
   end
   return table.concat(t, "\n")
 end
 function S.cStatus(snap)
   local t = {}
   if (snap.zone or "") ~= "" then
-    table.insert(t, S.inlineIcon(S.I_LOC) .. snap.zone .. (snap.rest and "  |cff6cb6ff(resting)|r" or ""))
+    table.insert(t, Theme.InlineIcon(Theme.I_LOC) .. snap.zone .. (snap.rest and "  |cff6cb6ff(resting)|r" or ""))
   end
-  if (snap.gold or 0) > 0 then table.insert(t, S.inlineIcon(S.I_GOLD) .. S.fmtGold(snap.gold)) end
+  if (snap.gold or 0) > 0 then table.insert(t, Theme.InlineIcon(Theme.I_GOLD) .. S.fmtGold(snap.gold)) end
   return table.concat(t, "\n")
 end
 function S.cGear(snap)
@@ -260,21 +157,21 @@ function S.cGear(snap)
     for i, slot in ipairs(ns.Snapshot.ENCHANT_SLOTS) do
       if bit.band(snap.enchMask, 2 ^ (i - 1)) ~= 0 then table.insert(names, ns.Snapshot.SLOT_NAMES[slot] or ("slot" .. slot)) end
     end
-    table.insert(t, S.inlineIcon(S.I_GEAR) .. "|cffff8000No enchant:|r " .. table.concat(names, ", "))
+    table.insert(t, Theme.InlineIcon(Theme.I_GEAR) .. "|cffff8000No enchant:|r " .. table.concat(names, ", "))
   end
-  if (snap.gemMiss or 0) > 0 then table.insert(t, S.inlineIcon(S.I_GEAR) .. "|cffff8000Empty sockets:|r " .. snap.gemMiss) end
+  if (snap.gemMiss or 0) > 0 then table.insert(t, Theme.InlineIcon(Theme.I_GEAR) .. "|cffff8000Empty sockets:|r " .. snap.gemMiss) end
   local sup = {}
   if (snap.pots or 0) > 0 then table.insert(sup, "Pots x" .. snap.pots) end
   table.insert(sup, "Stone " .. ((snap.hs or 0) > 0 and "|cff44ff44yes|r" or "|cffff5555no|r"))
   if (snap.foodCount or 0) > 0 then table.insert(sup, "Food x" .. snap.foodCount) end
-  table.insert(t, S.inlineIcon(S.I_SUP) .. table.concat(sup, "   "))
+  table.insert(t, Theme.InlineIcon(Theme.I_SUP) .. table.concat(sup, "   "))
   return table.concat(t, "\n")
 end
 function S.cQuest(snap)
   if not (ns.db.show.quest and (snap.qid or 0) ~= 0 and (snap.qname or "") ~= "") then return "" end
   local myQ = (C_SuperTrack and C_SuperTrack.GetSuperTrackedQuestID and C_SuperTrack.GetSuperTrackedQuestID()) or 0
   local mismatch = (myQ ~= 0 and snap.qid ~= 0 and myQ ~= snap.qid)
-  local q = S.inlineIcon(S.I_QUEST) .. snap.qname
+  local q = Theme.InlineIcon(Theme.I_QUEST) .. snap.qname
   if (snap.qtotal or 0) > 0 then q = q .. " |cff909090(" .. (snap.qcur or 0) .. "/" .. snap.qtotal .. ")|r" end
   if mismatch then q = q .. "  |cffffcc33(off-quest)|r" end
   return q
@@ -284,26 +181,26 @@ end
 function S.cNow(snap)
   local t = {}
   if (snap.zone or "") ~= "" then
-    table.insert(t, S.inlineIcon(S.I_LOC) .. snap.zone .. (snap.rest and "  |cff6cb6ff(resting)|r" or ""))
+    table.insert(t, Theme.InlineIcon(Theme.I_LOC) .. snap.zone .. (snap.rest and "  |cff6cb6ff(resting)|r" or ""))
   end
   if (snap.key or "") ~= "" and (snap.klvl or 0) > 0 then
-    table.insert(t, S.inlineIcon(S.I_KEY) .. "|cffa335ee" .. snap.key .. " +" .. snap.klvl .. "|r")
+    table.insert(t, Theme.InlineIcon(Theme.I_KEY) .. "|cffa335ee" .. snap.key .. " +" .. snap.klvl .. "|r")
   end
   if ((snap.vm or 0) + (snap.vr or 0) + (snap.vw or 0)) > 0 then
-    table.insert(t, S.inlineIcon(S.I_VAULT) .. "Vault  |cffffffffM+ " .. (snap.vm or 0) .. "/3   Raid " .. (snap.vr or 0) .. "/3|r")
+    table.insert(t, Theme.InlineIcon(Theme.I_VAULT) .. "Vault  |cffffffffM+ " .. (snap.vm or 0) .. "/3   Raid " .. (snap.vr or 0) .. "/3|r")
   end
-  if (snap.gold or 0) > 0 then table.insert(t, S.inlineIcon(S.I_GOLD) .. S.fmtGold(snap.gold)) end
+  if (snap.gold or 0) > 0 then table.insert(t, Theme.InlineIcon(Theme.I_GOLD) .. S.fmtGold(snap.gold)) end
   return table.concat(t, "\n")
 end
 
 -- Supplies detail (Inventory tab): consumables, bag space, wallet
 function S.cSupplies(snap)
   local t = {}
-  table.insert(t, S.inlineIcon(S.I_SUP) .. "Combat potions: |cffffffff" .. (snap.pots or 0) .. "|r")
-  table.insert(t, S.inlineIcon(S.I_SUP) .. "Healthstone: " .. ((snap.hs or 0) > 0 and "|cff44ff44yes|r" or "|cffff5555no|r"))
-  table.insert(t, S.inlineIcon(S.ICON.food) .. "Food: |cffffffff" .. (snap.foodCount or 0) .. "|r")
-  table.insert(t, S.inlineIcon(S.ICON.bags) .. "Bag space: |cffffffff" .. (snap.bags or 0) .. " free|r")
-  if (snap.gold or 0) > 0 then table.insert(t, S.inlineIcon(S.I_GOLD) .. S.fmtGold(snap.gold)) end
+  table.insert(t, Theme.InlineIcon(Theme.I_SUP) .. "Combat potions: |cffffffff" .. (snap.pots or 0) .. "|r")
+  table.insert(t, Theme.InlineIcon(Theme.I_SUP) .. "Healthstone: " .. ((snap.hs or 0) > 0 and "|cff44ff44yes|r" or "|cffff5555no|r"))
+  table.insert(t, Theme.InlineIcon(Theme.ICON.food) .. "Food: |cffffffff" .. (snap.foodCount or 0) .. "|r")
+  table.insert(t, Theme.InlineIcon(Theme.ICON.bags) .. "Bag space: |cffffffff" .. (snap.bags or 0) .. " free|r")
+  if (snap.gold or 0) > 0 then table.insert(t, Theme.InlineIcon(Theme.I_GOLD) .. S.fmtGold(snap.gold)) end
   return table.concat(t, "\n")
 end
 
@@ -320,10 +217,10 @@ function S.makeInfoPage(getSections, emptyText)
   end
   local function ensure(f, i)
     if f.headers[i] then return end
-    f.headers[i] = S.makeSectionHeader(f)
+    f.headers[i] = Widgets.SectionHeader(f)
     local b = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     b:SetJustifyH("LEFT"); b:SetJustifyV("TOP"); b:SetSpacing(7)
-    if f._ff then b:SetFont(f._ff, 15) end
+    if f._ff then b:SetFont(f._ff, Theme.FONT_BODY) end
     f.bodies[i] = b
   end
   local function refresh(f, ctx)
@@ -336,14 +233,14 @@ function S.makeInfoPage(getSections, emptyText)
       hd.label:ClearAllPoints()
       if prev then hd.label:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -24)
       else hd.label:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0) end
-      S.styleHeader(hd, s.title, math.min(W, 520))
+      Widgets.StyleHeader(hd, s.title, math.min(W, 520))
       bd:Show(); bd:SetWidth(math.min(W, 520))
       bd:ClearAllPoints(); bd:SetPoint("TOPLEFT", hd.diamond, "BOTTOMLEFT", -3, -12)
       bd:SetText((s.text and s.text ~= "") and s.text or (emptyText or "—"))
-      h = h + (prev and 24 or 0) + S.HEADER_H + bd:GetStringHeight()
+      h = h + (prev and 24 or 0) + Theme.HEADER_H + bd:GetStringHeight()
       prev = bd
     end
-    for i = n + 1, #f.headers do S.hideHeader(f.headers[i]); f.bodies[i]:Hide() end
+    for i = n + 1, #f.headers do Widgets.HideHeader(f.headers[i]); f.bodies[i]:Hide() end
     f:SetHeight(h + 10)
     return h + 10
   end
@@ -358,7 +255,7 @@ end
 -- ---------------------------------------------------------------------------
 function S.makeRowPage(getSections)
   local Row = ns.UI.Row
-  local SEC_GAP = 24
+  local SEC_GAP = Theme.SECTION_GAP
 
   local function build(host)
     local f = CreateFrame("Frame", nil, host); f:SetSize(10, 10)
@@ -371,7 +268,7 @@ function S.makeRowPage(getSections)
     if f._bodies[i] then return end
     local b = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     b:SetJustifyH("LEFT"); b:SetJustifyV("TOP"); b:SetSpacing(7)
-    if f._ff then b:SetFont(f._ff, 14) end
+    if f._ff then b:SetFont(f._ff, Theme.FONT_SMALL) end
     b:SetTextColor(0.7, 0.68, 0.6)
     f._bodies[i] = b
   end
@@ -384,19 +281,19 @@ function S.makeRowPage(getSections)
 
     for _, sec in ipairs(secs) do
       hi = hi + 1
-      if not f._headers[hi] then f._headers[hi] = S.makeSectionHeader(f) end
+      if not f._headers[hi] then f._headers[hi] = Widgets.SectionHeader(f) end
       local hd = f._headers[hi]
       hd.label:ClearAllPoints()
       if prev then hd.label:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -SEC_GAP)
       else hd.label:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0) end
-      S.styleHeader(hd, sec.title, colW)
-      h = h + (prev and SEC_GAP or 0) + S.HEADER_H
+      Widgets.StyleHeader(hd, sec.title, colW)
+      h = h + (prev and SEC_GAP or 0) + Theme.HEADER_H
       local anchor = hd.diamond
 
       if sec.rows and #sec.rows > 0 then
         for j, it in ipairs(sec.rows) do
           ri = ri + 1
-          if not f._rows[ri] then f._rows[ri] = Row.CreateInfo(f, S.I_QUEST) end
+          if not f._rows[ri] then f._rows[ri] = Row.CreateInfo(f, Theme.I_QUEST) end
           local r = f._rows[ri]
           r:SetShown(true); r:SetWidth(colW); r:SetIcon(it.icon)
           if it.youText or it.partnerText then
@@ -425,7 +322,7 @@ function S.makeRowPage(getSections)
       prev = anchor
     end
 
-    for i = hi + 1, #f._headers do S.hideHeader(f._headers[i]) end
+    for i = hi + 1, #f._headers do Widgets.HideHeader(f._headers[i]) end
     for i = ri + 1, #f._rows do f._rows[i]:SetShown(false) end
     for i = bi + 1, #f._bodies do f._bodies[i]:Hide() end
     f:SetHeight(h + 12)

@@ -10,6 +10,8 @@ ns.UI = ns.UI or {}
 local Settings = {}
 ns.Settings = Settings
 
+local L = ns.L
+
 local categoryID   -- handle for Settings.OpenToCategory
 
 -- ---------------------------------------------------------------------------
@@ -65,8 +67,8 @@ end
 
 -- A blocking/advisory toggle implemented as a checkbox ("blocking?").
 local function makeSeverityCheck(parent, label, key)
-  return makeCheck(parent, label .. " is blocking",
-    "When checked, failing this check turns the verdict RED. When unchecked, it is advisory (amber).",
+  return makeCheck(parent, label .. L[" is blocking"],
+    L["When checked, failing this check turns the verdict RED. When unchecked, it is advisory (amber)."],
     function() return ns.db.checks[key] == "blocking" end,
     function(v) ns.db.checks[key] = v and "blocking" or "advisory" end)
 end
@@ -80,11 +82,11 @@ local function buildPanel()
 
   local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
   title:SetPoint("TOPLEFT", 16, -16)
-  title:SetText("DuoReady — Partner Readiness Dashboard")
+  title:SetText("DuoReady — " .. L["Partner Readiness Dashboard"])
 
   local sub = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
-  sub:SetText("Type |cffffff00/dr|r for quick commands.")
+  sub:SetText(L["Type |cffffff00/dr|r for quick commands."])
 
   -- Two columns: left = general/thresholds, right = checks/visibility.
   local leftX, rightX = 16, 320
@@ -98,39 +100,39 @@ local function buildPanel()
   end
 
   -- LEFT COLUMN -------------------------------------------------------------
-  header("General", leftX, y)
+  header(L["General"], leftX, y)
   local cy = y - 24
 
-  local lockCB = makeCheck(panel, "Lock panel position",
-    "Prevents dragging the dashboard.",
+  local lockCB = makeCheck(panel, L["Lock panel position"],
+    L["Prevents dragging the dashboard."],
     function() return ns.db.locked end,
     function(v) ns.db.locked = v; if ns.Dashboard then ns.Dashboard.ApplyLock() end end)
   lockCB:SetPoint("TOPLEFT", leftX, cy); cy = cy - 30
 
-  local demoCB = makeCheck(panel, "Demo mode (fake partner)",
-    "Renders the panel with sample data for screenshots/video.",
+  local demoCB = makeCheck(panel, L["Demo mode (fake partner)"],
+    L["Renders the panel with sample data for screenshots/video."],
     function() return ns.db.demoMode end,
     function(v) ns.db.demoMode = v end)
   demoCB:SetPoint("TOPLEFT", leftX, cy); cy = cy - 40
 
-  local scaleS = makeSlider(panel, "Scale", 0.5, 2.0, 0.05,
+  local scaleS = makeSlider(panel, L["Scale"], 0.5, 2.0, 0.05,
     function() return ns.db.scale or 1.0 end,
     function(v) ns.Dashboard.SetScale(v) end,
-    function(v) return string.format("Panel scale: %.2f", v) end)
+    function(v) return string.format(L["Panel scale: %.2f"], v) end)
   scaleS:SetPoint("TOPLEFT", leftX + 4, cy); cy = cy - 50
 
-  header("Thresholds", leftX, cy); cy = cy - 24
-  local durS = makeSlider(panel, "Durability", 0, 100, 5,
+  header(L["Thresholds"], leftX, cy); cy = cy - 24
+  local durS = makeSlider(panel, L["Durability"], 0, 100, 5,
     function() return ns.db.thresholds.durability end,
     function(v) ns.db.thresholds.durability = v end,
-    function(v) return "Min durability: " .. v .. "%" end)
+    function(v) return L["Min durability: "] .. v .. "%" end)
   durS:SetPoint("TOPLEFT", leftX + 4, cy); cy = cy - 50
 
-  header("Broadcast quest", leftX, cy); cy = cy - 24
+  header(L["Broadcast quest"], leftX, cy); cy = cy - 24
   local qDesc = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   qDesc:SetPoint("TOPLEFT", leftX, cy)
   qDesc:SetWidth(280); qDesc:SetJustifyH("LEFT")
-  qDesc:SetText("Pin a quest ID to broadcast, or leave empty to use your super-tracked quest.")
+  qDesc:SetText(L["Pin a quest ID to broadcast, or leave empty to use your super-tracked quest."])
   cy = cy - 36
 
   local qBox = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
@@ -154,7 +156,7 @@ local function buildPanel()
   local qClear = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
   qClear:SetSize(120, 22)
   qClear:SetPoint("LEFT", qBox, "RIGHT", 8, 0)
-  qClear:SetText("Use super-tracked")
+  qClear:SetText(L["Use super-tracked"])
   qClear:SetScript("OnClick", function()
     ns.db.pinnedQuestID = nil
     qBox:SetText("")
@@ -163,16 +165,16 @@ local function buildPanel()
   end)
 
   -- RIGHT COLUMN ------------------------------------------------------------
-  header("Visible rows", rightX, y)
+  header(L["Visible rows"], rightX, y)
   local ry = y - 24
   local rowDefs = {
-    { "durability", "Repairs / durability" },
-    { "flask",      "Flask" },
-    { "food",       "Food buff" },
-    { "wpn",        "Weapon oil" },
-    { "rune",       "Augment rune" },
-    { "bags",       "Bag space" },
-    { "quest",      "Quest section" },
+    { "durability", L["Repairs / durability"] },
+    { "flask",      L["Flask"] },
+    { "food",       L["Food buff"] },
+    { "wpn",        L["Weapon oil"] },
+    { "rune",       L["Augment rune"] },
+    { "bags",       L["Bag space"] },
+    { "quest",      L["Quest section"] },
   }
   for _, def in ipairs(rowDefs) do
     local key, label = def[1], def[2]
@@ -183,15 +185,15 @@ local function buildPanel()
   end
 
   ry = ry - 10
-  header("Blocking checks (red on fail)", rightX, ry); ry = ry - 24
+  header(L["Blocking checks (red on fail)"], rightX, ry); ry = ry - 24
   local sevDefs = {
-    { "durability",    "Durability" },
-    { "flask",         "Flask" },
-    { "food",          "Food" },
-    { "bags",          "Bags" },
-    { "wpn",           "Weapon oil" },
-    { "rune",          "Aug rune" },
-    { "questMismatch", "Quest mismatch" },
+    { "durability",    L["Durability"] },
+    { "flask",         L["Flask"] },
+    { "food",          L["Food"] },
+    { "bags",          L["Bags"] },
+    { "wpn",           L["Weapon oil"] },
+    { "rune",          L["Aug rune"] },
+    { "questMismatch", L["Quest mismatch"] },
   }
   for _, def in ipairs(sevDefs) do
     local cb = makeSeverityCheck(panel, def[2], def[1])

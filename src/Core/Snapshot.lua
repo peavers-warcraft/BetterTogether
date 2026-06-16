@@ -19,6 +19,7 @@ local function b(v) return v and "1" or "0" end
 -- ---------------------------------------------------------------------------
 -- Encode DuoReady.self -> payload string (the part after "SNAP|<proto>|").
 -- ---------------------------------------------------------------------------
+--- @return string payload Pipe-delimited SNAP body (kept under the chunk threshold).
 function Snapshot.Encode()
   local s = ns.state.self
   -- qname must not contain our delimiters; strip pipes/carets defensively.
@@ -46,6 +47,8 @@ end
 -- Decode a payload string -> partner state table.
 -- `payload` is everything after "SNAP|<proto>|". Returns a table or nil.
 -- ---------------------------------------------------------------------------
+--- @param payload string|nil The SNAP body (everything after "SNAP|<proto>|").
+--- @return table|nil snap Decoded partner readiness, or nil if the payload was empty.
 function Snapshot.Decode(payload)
   if not payload or payload == "" then return nil end
 
@@ -101,6 +104,7 @@ Snapshot.SLOT_NAMES = {
 -- Format mirrors SNAP: pipe-delimited key=value, qname-style strings last-safe
 -- because we strip delimiters from any free text.
 -- ---------------------------------------------------------------------------
+--- @return string payload Pipe-delimited CARD body.
 function Snapshot.EncodeCard()
   local s = ns.state.self
   local function clean(str, n)
@@ -132,6 +136,8 @@ function Snapshot.EncodeCard()
   return table.concat(parts, "|")
 end
 
+--- @param payload string|nil The CARD body.
+--- @return table|nil card Decoded identity/location/M+/gear card, or nil.
 function Snapshot.DecodeCard(payload)
   if not payload or payload == "" then return nil end
   local kv = {}
@@ -174,6 +180,7 @@ end
 -- STATS: persistent shared duo counters (see SharedStats.lua). Reads from the
 -- per-character saved store ns.chardb.stats.
 -- ---------------------------------------------------------------------------
+--- @return string payload Pipe-delimited STATS body from ns.chardb.stats.
 function Snapshot.EncodeStats()
   local s = (ns.chardb and ns.chardb.stats) or {}
   local parts = {
@@ -188,6 +195,8 @@ function Snapshot.EncodeStats()
   return table.concat(parts, "|")
 end
 
+--- @param payload string|nil The STATS body.
+--- @return table|nil stats Decoded duo counters, or nil.
 function Snapshot.DecodeStats(payload)
   if not payload or payload == "" then return nil end
   local kv = {}
@@ -207,6 +216,10 @@ end
 -- A failed *blocking* check => red; a failed *advisory* check => amber.
 -- "questMismatch" is evaluated against our own super-tracked quest.
 -- ---------------------------------------------------------------------------
+--- @param snap table A partner snapshot.
+--- @param db table|nil Config table (defaults to ns.db).
+--- @return string worst "ready" | "amber" | "red".
+--- @return table issues List of { key=, severity= } failures.
 function Snapshot.ComputeVerdict(snap, db)
   db = db or ns.db
   local checks     = db.checks

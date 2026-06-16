@@ -173,7 +173,7 @@ local function onPlayerLogin()
   if ns.SelfState and ns.SelfState.Update then ns.SelfState.Update() end
   if ns.Pairing and ns.Pairing.Resume then ns.Pairing.Resume() end
 
-  ns:Print("loaded v" .. ns.VERSION .. ". Type |cffffff00/dr|r for options.")
+  ns:Print(ns.L["loaded v"] .. ns.VERSION .. ns.L[". Type |cffffff00/dr|r for options."])
 end
 
 ns:RegisterEvent("ADDON_LOADED", onAddonLoaded)
@@ -185,6 +185,7 @@ ns:RegisterEvent("PLAYER_LOGIN", onPlayerLogin)
 SLASH_DUOREADY1 = "/duoready"
 SLASH_DUOREADY2 = "/dr"
 SlashCmdList["DUOREADY"] = function(msg)
+  local L = ns.L
   msg = (msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
   -- Split into command + argument; only the command is case-folded so character
   -- names in `arg` keep their original capitalization.
@@ -272,11 +273,11 @@ SlashCmdList["DUOREADY"] = function(msg)
     if ns.Settings and ns.Settings.Open and cmd == "" then
       ns.Settings.Open()
     else
-      ns:Print("commands:")
-      ns:Print("  |cffffff00/dr invite <name>|r — pair with a partner   |cffffff00/dr accept|r / |cffffff00/dr decline|r")
-      ns:Print("  |cffffff00/dr partners|r — list saved partners   |cffffff00/dr switch <name>|r — make one active")
+      ns:Print(L["commands:"])
+      ns:Print("  |cffffff00/dr invite <name>|r — " .. L["pair with a partner"] .. "   |cffffff00/dr accept|r / |cffffff00/dr decline|r")
+      ns:Print("  |cffffff00/dr partners|r — " .. L["list saved partners"] .. "   |cffffff00/dr switch <name>|r — " .. L["make one active"])
       ns:Print("  |cffffff00/dr unpair|r · |cffffff00/dr sync|r · |cffffff00/dr lock|r · |cffffff00/dr demo|r · |cffffff00/dr show|r/|cffffff00hide|r · |cffffff00/dr reset|r")
-      ns:Print("  |cffffff00/dr test|r (loopback) · |cffffff00/dr selftest|r · |cffffff00/dr debug|r · |cffffff00/dr|r (options)")
+      ns:Print("  |cffffff00/dr test|r (loopback) · |cffffff00/dr selftest|r · |cffffff00/dr debug|r · |cffffff00/dr|r (" .. L["options"] .. ")")
     end
   end
 end

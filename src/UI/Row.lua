@@ -1,7 +1,7 @@
 --[[ UI/Row.lua
   A single readiness row: [icon chip] Label .......... value  [status mark]
-  Icons are unified into a circular "chip" (dark fill + thin gold rim + circular-
-  masked icon) so the mixed in-game art reads as one cohesive, premium set.
+  Icons are unified into a circular "chip" (Widgets.Chip) so the mixed in-game art
+  reads as one cohesive, premium set. Theming/constants come from ns.UI.Theme.
 ]]
 
 local addonName, ns = ...
@@ -10,27 +10,19 @@ ns.UI = ns.UI or {}
 local Row = {}
 ns.UI.Row = Row
 
-local GOLD = { 0.83, 0.67, 0.33 }
-local CIRCLE = "Interface\\CHARACTERFRAME\\TempPortraitAlphaMask"
+local Theme = ns.UI.Theme
+local Widgets = ns.UI.Widgets
+local GOLD = Theme.GOLD
 
-local function atlasExists(name)
-  return C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(name) ~= nil
-end
-local HAS_ATLAS = atlasExists("common-icon-checkmark")
+local CreateFrame = CreateFrame
+
+local HAS_ATLAS = Theme.AtlasExists("common-icon-checkmark")
 local FALLBACK = {
   ok = "Interface\\RaidFrame\\ReadyCheck-Ready", no = "Interface\\RaidFrame\\ReadyCheck-NotReady",
   wait = "Interface\\RaidFrame\\ReadyCheck-Waiting",
 }
--- Apply chip art, handling atlas names (crisp at any size) vs file textures
--- (cropped slightly to hide the baked-in border). Mirrors S.applyIcon; kept local
--- since Row loads before Shared.
-local function applyIcon(tex, art)
-  if type(art) == "string" and not art:find("\\") and atlasExists(art) then
-    tex:SetTexCoord(0, 1, 0, 1); tex:SetAtlas(art)
-  else
-    tex:SetTexture(art); tex:SetTexCoord(0.1, 0.9, 0.1, 0.9)
-  end
-end
+-- Paint the right-hand status mark: check / red-x / warning (atlas where available,
+-- ready-check textures as a fallback). state: true=ok, false=fail, nil=waiting.
 local function setMark(tex, state)
   if HAS_ATLAS then
     if state == true then tex:SetAtlas("common-icon-checkmark")
@@ -50,47 +42,24 @@ local ROW_HEIGHT, CHIP, MARK_SIZE = 32, 26, 18
 -- right-aligned string and "You done" drifts left/right with the partner text.
 local PARTNER_COL, VALUE_GAP = 150, 14
 
--- Circular icon chip: gold rim + dark fill + masked icon.
-local function makeChip(parent, size, iconPath)
-  local c = CreateFrame("Frame", nil, parent)
-  c:SetSize(size, size)
+-- Exposed so other UI (Statistics tiles, Achievement cards) can reuse the exact chip.
+Row.MakeChip = Widgets.Chip
 
-  local rim = c:CreateTexture(nil, "BACKGROUND")
-  rim:SetAllPoints(c); rim:SetColorTexture(GOLD[1], GOLD[2], GOLD[3], 0.55)
-  local rimMask = c:CreateMaskTexture()
-  rimMask:SetAllPoints(rim); rimMask:SetTexture(CIRCLE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-  rim:AddMaskTexture(rimMask)
-
-  local fill = c:CreateTexture(nil, "BORDER")
-  fill:SetPoint("CENTER"); fill:SetSize(size - 3, size - 3); fill:SetColorTexture(0.09, 0.09, 0.12, 1)
-  local fillMask = c:CreateMaskTexture()
-  fillMask:SetAllPoints(fill); fillMask:SetTexture(CIRCLE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-  fill:AddMaskTexture(fillMask)
-
-  local icon = c:CreateTexture(nil, "ARTWORK")
-  icon:SetPoint("CENTER"); icon:SetSize(size - 9, size - 9)
-  applyIcon(icon, iconPath)
-  local iconMask = c:CreateMaskTexture()
-  iconMask:SetAllPoints(icon); iconMask:SetTexture(CIRCLE, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-  icon:AddMaskTexture(iconMask)
-
-  c.icon = icon
-  return c
-end
--- Exposed so other UI (e.g. the Statistics tiles) can reuse the exact chip look.
-Row.MakeChip = makeChip
-
+--- A readiness row: chip + label + right-aligned value + status mark.
+--- @param parent table
+--- @param iconPath string|number Chip art.
+--- @return table row Object with :Set/:SetWidth/:Show/:Hide/:SetShown/:GetHeight + .frame.
 function Row.Create(parent, iconPath)
   local f = CreateFrame("Frame", nil, parent)
   f:SetHeight(ROW_HEIGHT)
 
   local hl = f:CreateTexture(nil, "BACKGROUND")
-  hl:SetAllPoints(f); hl:SetColorTexture(1, 1, 1, 0.05); hl:Hide()
+  hl:SetAllPoints(f); hl:SetColorTexture(1, 1, 1, Theme.HL_ALPHA); hl:Hide()
   f:SetScript("OnEnter", function() hl:Show() end)
   f:SetScript("OnLeave", function() hl:Hide() end)
   f:EnableMouse(true)
 
-  local chip = makeChip(f, CHIP, iconPath)
+  local chip = Widgets.Chip(f, CHIP, iconPath)
   chip:SetPoint("LEFT", f, "LEFT", 2, 0)
   f.chip = chip
 
@@ -98,7 +67,7 @@ function Row.Create(parent, iconPath)
 
   local label = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   label:SetPoint("LEFT", chip, "RIGHT", 12, 0); label:SetJustifyH("LEFT")
-  if fontFile then label:SetFont(fontFile, 15) end
+  if fontFile then label:SetFont(fontFile, Theme.FONT_ROW) end
   f.label = label
 
   local status = f:CreateTexture(nil, "OVERLAY")
@@ -107,7 +76,7 @@ function Row.Create(parent, iconPath)
 
   local value = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   value:SetPoint("RIGHT", status, "LEFT", -10, 0); value:SetJustifyH("RIGHT")
-  if fontFile then value:SetFont(fontFile, 15) end
+  if fontFile then value:SetFont(fontFile, Theme.FONT_ROW) end
   f.value = value
 
   label:SetPoint("RIGHT", value, "LEFT", -8, 0)
@@ -129,39 +98,43 @@ function Row.Create(parent, iconPath)
   return obj
 end
 
--- Info row: chip + label + value, no status mark, with a settable icon. Used for
--- non-readiness sections (e.g. "Now") so they share the readiness look.
+--- Info row: chip + label + value, no status mark, with a settable icon. Used for
+--- non-readiness sections (e.g. "Now") so they share the readiness look. Supports a
+--- two-column "You … / Partner …" comparison mode via :SetSplit.
+--- @param parent table
+--- @param iconPath string|number|nil Chip art (defaults to a question mark).
+--- @return table row Object with :Set/:SetSplit/:SetIcon/:SetHover/:SetClick/:SetSelected + .frame.
 function Row.CreateInfo(parent, iconPath)
   local f = CreateFrame("Frame", nil, parent)
   f:SetHeight(ROW_HEIGHT)
 
   -- persistent selection tint (under the hover highlight)
   local sel = f:CreateTexture(nil, "BACKGROUND")
-  sel:SetAllPoints(f); sel:SetColorTexture(GOLD[1], GOLD[2], GOLD[3], 0.14); sel:Hide()
+  sel:SetAllPoints(f); sel:SetColorTexture(GOLD[1], GOLD[2], GOLD[3], Theme.SEL_ALPHA); sel:Hide()
   local hl = f:CreateTexture(nil, "BACKGROUND")
-  hl:SetAllPoints(f); hl:SetColorTexture(1, 1, 1, 0.05); hl:Hide()
+  hl:SetAllPoints(f); hl:SetColorTexture(1, 1, 1, Theme.HL_ALPHA); hl:Hide()
   f:SetScript("OnEnter", function() hl:Show(); if f._enter then f._enter(f) end end)
   f:SetScript("OnLeave", function() hl:Hide(); if f._leave then f._leave(f) end end)
   f:SetScript("OnMouseUp", function() if f._click then f._click() end end)
   f:EnableMouse(true)
 
-  local chip = makeChip(f, CHIP, iconPath or "Interface\\Icons\\INV_Misc_QuestionMark")
+  local chip = Widgets.Chip(f, CHIP, iconPath or "Interface\\Icons\\INV_Misc_QuestionMark")
   chip:SetPoint("LEFT", f, "LEFT", 2, 0)
   f.chip = chip
 
   local fontFile = GameFontHighlight:GetFont()
   local label = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   label:SetPoint("LEFT", chip, "RIGHT", 12, 0); label:SetJustifyH("LEFT")
-  if fontFile then label:SetFont(fontFile, 15) end
+  if fontFile then label:SetFont(fontFile, Theme.FONT_ROW) end
   f.label = label
   local value = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   value:SetPoint("RIGHT", f, "RIGHT", -4, 0); value:SetJustifyH("RIGHT"); value:SetWordWrap(false)
-  if fontFile then value:SetFont(fontFile, 15) end
+  if fontFile then value:SetFont(fontFile, Theme.FONT_ROW) end
   f.value = value
   -- Second value column (the "You …" side); only shown in two-column mode.
   local value2 = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   value2:SetJustifyH("RIGHT"); value2:SetWordWrap(false); value2:Hide()
-  if fontFile then value2:SetFont(fontFile, 15) end
+  if fontFile then value2:SetFont(fontFile, Theme.FONT_ROW) end
   f.value2 = value2
   label:SetPoint("RIGHT", value, "LEFT", -8, 0); label:SetWordWrap(false)
 
@@ -174,7 +147,7 @@ function Row.CreateInfo(parent, iconPath)
   end
 
   local obj = { frame = f }
-  function obj:SetIcon(p) applyIcon(f.chip.icon, p) end
+  function obj:SetIcon(p) Theme.ApplyIcon(f.chip.icon, p) end
   function obj:SetHover(enterFn, leaveFn) f._enter = enterFn; f._leave = leaveFn end
   function obj:SetClick(fn) f._click = fn end
   function obj:SetSelected(v) sel:SetShown(v and true or false) end

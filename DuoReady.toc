@@ -5,6 +5,7 @@
 ## Version: 1.0.0
 ## IconTexture: Interface\Icons\INV_Misc_GroupNeedMore
 ## Category-enUS: Peavers
+## X-Localizations: enUS
 
 ## X-Website: https://github.com/peavers-warcraft
 ## X-Source-Code: https://github.com/peavers-warcraft/DuoReady
@@ -15,9 +16,13 @@
 Changelog.lua
 
 # Load order matters: Core sets up the namespace + event dispatch first, then the
-# data layer, then comms, then the UI (Row before Dashboard which uses it).
+# localization table and shared utilities (both consumed everywhere below), then
+# the data layer, then comms, then the UI (Theme + Widgets before Row/Dashboard
+# which consume them).
 
 src\Core\Core.lua
+src\Locales\enUS.lua
+src\Core\Util.lua
 src\Core\Consumables.lua
 src\Core\SelfState.lua
 src\Core\Snapshot.lua
@@ -28,6 +33,8 @@ src\Core\AchvSync.lua
 src\Core\Pairing.lua
 src\Core\Comm.lua
 
+src\UI\Theme.lua
+src\UI\Widgets.lua
 src\UI\Row.lua
 src\UI\Pages\Shared.lua
 src\UI\Dashboard.lua

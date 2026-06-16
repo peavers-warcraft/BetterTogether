@@ -18,25 +18,12 @@ ns.Pairing = Pairing
 local pendingInviteTo = nil   -- name we invited (awaiting their ACCEPT)
 local pendingInviteFrom = nil -- name that invited us (for /dr accept fallback)
 
-local function shortName(n) return n and n:match("^[^-]+") or n end
+-- Name/identity helpers live in ns.Util (shared with Comm). Aliased locally for
+-- brevity; ShortName stays exposed on the module for Core's slash commands + Dashboard.
+local shortName  = ns.Util.ShortName
+local fullName   = ns.Util.FullName
+local myFullName = ns.Util.MyFullName
 Pairing.ShortName = shortName
-
--- Build a full "Name-Realm" target. If the user typed a bare name, attach our
--- own normalized realm (works for same-realm and connected-realm partners).
-local function fullName(name)
-  if not name or name == "" then return nil end
-  if name:find("-") then return name end
-  local realm = GetNormalizedRealmName and GetNormalizedRealmName()
-  if realm and realm ~= "" then return name .. "-" .. realm end
-  return name
-end
-
-local function myFullName()
-  local n = UnitName("player")
-  local r = GetNormalizedRealmName and GetNormalizedRealmName()
-  if r and r ~= "" then return n .. "-" .. r end
-  return n
-end
 
 -- ---------------------------------------------------------------------------
 -- Roster store + migration
@@ -79,6 +66,9 @@ function Pairing.Roster()
   return (ns.chardb and ns.chardb.pair and ns.chardb.pair.roster) or {}
 end
 
+--- Is `sender` our currently-active bonded partner (by short name)?
+--- @param sender string|nil A character name (short or full).
+--- @return boolean
 function Pairing.IsBonded(sender)
   local p = Pairing.PartnerName()
   if not p or not sender then return false end
@@ -108,6 +98,8 @@ end
 -- ---------------------------------------------------------------------------
 -- Public commands
 -- ---------------------------------------------------------------------------
+--- Send a pair invite (whisper) to a character by name.
+--- @param name string A bare or "Name-Realm" character name.
 function Pairing.Invite(name)
   local target = fullName(name)
   if not target then

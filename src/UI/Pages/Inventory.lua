@@ -10,6 +10,7 @@
 
 local addonName, ns = ...
 local S = ns.UI.Shared
+local L = ns.L
 
 -- Partner's on-demand item strings. DETAIL[id] is one of: a string (resolved full
 -- "item:…" with bonus IDs), the boolean true (a request is in flight), or nil
@@ -64,7 +65,7 @@ end
 local function getSections(snap)
   local inv = (ns.db.demoMode and S.demoInv()) or (ns.state.partner and ns.state.partner.inv) or {}
   if #inv == 0 then
-    return { { title = "Inventory", text = "|cff808080Waiting for your partner's bags… (a request is sent when you open this tab).|r" } }
+    return { { title = L["Inventory"], text = "|cff808080" .. L["Waiting for your partner's bags… (a request is sent when you open this tab)."] .. "|r" } }
   end
 
   local groups = {}
@@ -93,7 +94,7 @@ local function getSections(snap)
   for _, cat in ipairs(ORDER) do
     if groups[cat] then
       table.sort(groups[cat], function(a, b) return a._s < b._s end)
-      sections[#sections + 1] = { title = cat .. "  |cff707070(" .. #groups[cat] .. ")|r", rows = groups[cat] }
+      sections[#sections + 1] = { title = L[cat] .. "  |cff707070(" .. #groups[cat] .. ")|r", rows = groups[cat] }
     end
   end
   return sections
@@ -102,7 +103,7 @@ end
 local build, refresh = S.makeRowPage(getSections)
 
 ns.Dashboard.RegisterPage({
-  key = "inventory", label = "Inventory", order = 6, detail = true,
+  key = "inventory", label = L["Inventory"], order = 6, detail = true,
   build = build, refresh = refresh,
   onShow = function() if ns.Comm and ns.Comm.RequestInventory then ns.Comm.RequestInventory() end end,
 })
