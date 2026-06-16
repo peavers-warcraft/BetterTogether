@@ -35,6 +35,35 @@ Theme.RIM_ALPHA = 0.55   -- gold rim on a chip
 Theme.HL_ALPHA  = 0.05   -- white hover highlight
 Theme.SEL_ALPHA = 0.14   -- gold persistent-selection tint
 
+-- Inline text-colour escapes (full |cffRRGGBB prefix; pair with "|r"). Centralised
+-- so coloured inline text shares one palette instead of hand-typed hex scattered at
+-- each call site (the dashboard detail panes and settings used to do this inline).
+-- Values preserve the existing look — this is a single source of truth, not a reskin.
+Theme.C = {
+  white  = "|cffffffff",   -- emphasis / values
+  gold   = "|cffffd100",   -- bright gold numerals (item level, counts)
+  ready  = "|cff44ff44",   -- positive / "yes"
+  danger = "|cffff5555",   -- negative / "no"
+  orange = "|cffff8000",   -- warning label (no enchant, empty sockets)
+  warn   = "|cffffcc33",   -- caution amber text
+  info   = "|cff6cb6ff",   -- info blue (resting, hints)
+  epic   = "|cffa335ee",   -- epic purple (keystones)
+  faint  = "|cffb0b0b0",   -- "Lv" prefix grey
+  muted  = "|cff9d9d9d",   -- de-emphasised label (ilvl)
+  muted2 = "|cffaaaaaa",   -- secondary muted (loading text)
+  soft   = "|cffd0d0d0",   -- soft body text
+  dim    = "|cff808080",   -- faintest note grey
+  accent = "|cff66ccff",   -- addon accent blue (print prefix, settings headers)
+}
+
+--- Build an inline colour escape (|cffRRGGBB) from an RGB triple (e.g. Theme.GOLD).
+--- Lets per-line/quality colours derive from the same palette the rest of the UI uses.
+--- @param rgb table {r,g,b} components in 0..1.
+--- @return string prefix The "|cffRRGGBB" escape (pair with "|r").
+function Theme.Hex(rgb)
+  return string.format("|cff%02x%02x%02x", rgb[1] * 255, rgb[2] * 255, rgb[3] * 255)
+end
+
 -- ---------------------------------------------------------------------------
 -- Verdict indicators (spec §8.2). Labels run through the locale table.
 -- ---------------------------------------------------------------------------

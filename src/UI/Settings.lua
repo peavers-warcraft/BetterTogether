@@ -10,6 +10,7 @@ ns.UI = ns.UI or {}
 local Settings = {}
 ns.Settings = Settings
 
+local Theme = ns.UI.Theme
 local L = ns.L
 
 local categoryID   -- handle for Settings.OpenToCategory
@@ -95,7 +96,7 @@ local function buildPanel()
   local function header(text, x, yy)
     local fs = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     fs:SetPoint("TOPLEFT", x, yy)
-    fs:SetText("|cff66ccff" .. text .. "|r")
+    fs:SetText(Theme.C.accent .. text .. "|r")
     return fs
   end
 

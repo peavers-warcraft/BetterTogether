@@ -179,10 +179,10 @@ local function layoutCompact(c, snap, r, g, b)
   local parts = {}
   local cn = S.classDisplayName(snap.cls)
   if sp ~= "" or cn ~= "" then table.insert(parts, S.hex(r, g, b) .. (sp ~= "" and (sp .. " ") or "") .. cn .. "|r") end
-  if (snap.lvl or 0) > 0 then table.insert(parts, "|cffb0b0b0Lv " .. snap.lvl .. "|r") end
+  if (snap.lvl or 0) > 0 then table.insert(parts, Theme.C.faint .. L["Lv "] .. snap.lvl .. "|r") end
   c.idFS:SetText(table.concat(parts, "  "))
   c.ilvlFS:ClearAllPoints(); c.ilvlFS:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PAD, -PAD)
-  c.ilvlFS:SetText((snap.ilvl or 0) > 0 and ("|cffffd100" .. snap.ilvl .. "|r |cff9d9d9dilvl|r") or "")
+  c.ilvlFS:SetText((snap.ilvl or 0) > 0 and (Theme.C.gold .. snap.ilvl .. "|r " .. Theme.C.muted .. L["ilvl"] .. "|r") or "")
 
   S.setRowValues(c.rows, snap)
   local anchor, count = c.idFS, 0
@@ -230,15 +230,15 @@ local function renderItemDetail()
   -- once the upgraded string lands.
   if panel._detailPending then
     local nm, _, quality = GetItemInfo(id)
-    panel.detailName:SetText(nm or ("item:" .. tostring(id)))
-    local qr, qg, qb = 0.83, 0.67, 0.33
+    panel.detailName:SetText(nm or (L["item:"] .. tostring(id)))
+    local qr, qg, qb = Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3]
     local qc = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
     if qc then qr, qg, qb = qc.r or qr, qc.g or qg, qc.b or qb end
     panel.detailName:SetTextColor(qr, qg, qb)
     panel.detailQChip:Hide(); panel.detailQLabel:Hide()
     panel.detailText:ClearAllPoints()
     panel.detailText:SetPoint("TOPLEFT", panel.detailBody, "TOPLEFT", 2, -60)
-    panel.detailText:SetText("|cffaaaaaaLoading partner's item details…|r")
+    panel.detailText:SetText(Theme.C.muted2 .. L["Loading partner's item details…"] .. "|r")
     panel.detailText:Show()
     panel.detailBody:SetHeight(90)
     if panel.detailScroll then panel.detailScroll:SetVerticalScroll(0); panel.detailScroll:UpdateScrollChildRect() end
@@ -255,7 +255,7 @@ local function renderItemDetail()
   if not data or not data.lines or #data.lines == 0 then
     local numId = type(id) == "number" and id or tonumber(tostring(id):match("item:(%d+)"))
     if numId and C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(numId) end
-    panel.detailName:SetText("|cffaaaaaaLoading…|r")
+    panel.detailName:SetText(Theme.C.muted2 .. L["Loading…"] .. "|r")
     panel.detailText:Hide(); panel.detailQChip:Hide(); panel.detailQLabel:Hide()
     panel.detailBody:SetHeight(60); if panel.detailScroll then panel.detailScroll:UpdateScrollChildRect() end
     return
@@ -264,8 +264,8 @@ local function renderItemDetail()
   local function surface(t) if TooltipUtil and TooltipUtil.SurfaceArgs then TooltipUtil.SurfaceArgs(t) end end
   surface(data)
   local l1 = data.lines[1]; surface(l1)
-  panel.detailName:SetText((l1 and l1.leftText) or ("item:" .. id))
-  local qr, qg, qb = 0.83, 0.67, 0.33
+  panel.detailName:SetText((l1 and l1.leftText) or (L["item:"] .. id))
+  local qr, qg, qb = Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3]
   if l1 and l1.leftColor and l1.leftColor.GetRGB then qr, qg, qb = l1.leftColor:GetRGB() end
   panel.detailName:SetTextColor(qr, qg, qb)
 
@@ -279,10 +279,10 @@ local function renderItemDetail()
     local lt = line.leftText or ""
     if not (lt:find("Professions") or lt:find("CraftingQuality")) then
       local s = lt:gsub("|T([^:|]+):[^|]*|t", "|T%1:18:18:0:-3|t")  -- normalize inline icons
-      if line.rightText and line.rightText ~= "" then s = s .. "   |cffffffff" .. line.rightText .. "|r" end
+      if line.rightText and line.rightText ~= "" then s = s .. "   " .. Theme.C.white .. line.rightText .. "|r" end
       if line.leftColor and line.leftColor.GetRGB then
         local r, g, b = line.leftColor:GetRGB()
-        s = string.format("|cff%02x%02x%02x", r * 255, g * 255, b * 255) .. s .. "|r"
+        s = Theme.Hex({ r, g, b }) .. s .. "|r"
       end
       parts[#parts + 1] = s
     end
@@ -310,7 +310,7 @@ local function renderItemDetail()
     panel.detailQChip:ClearAllPoints()
     panel.detailQChip:SetPoint("TOPLEFT", panel.detailText, "BOTTOMLEFT", 0, -10)
     panel.detailQChip:Show()
-    panel.detailQLabel:SetText("Quality |cffffffffTier " .. q .. "|r"); panel.detailQLabel:Show()
+    panel.detailQLabel:SetText(L["Quality "] .. Theme.C.white .. L["Tier "] .. q .. "|r"); panel.detailQLabel:Show()
     contentH = contentH + 10 + 30
   else
     panel.detailQChip:Hide(); panel.detailQLabel:Hide()
@@ -328,40 +328,40 @@ local function renderQuestDetail()
   panel.detailHint:Hide()
   Theme.ApplyIcon(panel.detailChip.icon, Theme.I_QUEST)
   panel.detailChip:Show()
-  panel.detailName:SetText(q.title or ("Quest #" .. (q.id or 0)))
+  panel.detailName:SetText(q.title or (L["Quest #"] .. (q.id or 0)))
   panel.detailName:SetTextColor(Theme.CREAM[1], Theme.CREAM[2], Theme.CREAM[3])
 
   local function prog(side)
-    if not side then return "|cff808080not on this quest|r" end
-    if side.done then return "|cff44ff44Complete|r" end
-    if (side.total or 0) > 0 then return "|cffffffff" .. (side.cur or 0) .. " / " .. side.total .. "|r" end
-    return "|cffffffffIn progress|r"
+    if not side then return Theme.C.dim .. L["not on this quest"] .. "|r" end
+    if side.done then return Theme.C.ready .. L["Complete"] .. "|r" end
+    if (side.total or 0) > 0 then return Theme.C.white .. (side.cur or 0) .. " / " .. side.total .. "|r" end
+    return Theme.C.white .. L["In progress"] .. "|r"
   end
 
   local parts = {}
   local statusText = ({
-    both        = "|cff44ff44You're both on this quest.|r",
-    partnerOnly = "|cffffcc33Only your partner is on this quest.|r",
-    youOnly     = "|cff6cb6ffOnly you are on this quest.|r",
+    both        = Theme.C.ready .. L["You're both on this quest."] .. "|r",
+    partnerOnly = Theme.C.warn .. L["Only your partner is on this quest."] .. "|r",
+    youOnly     = Theme.C.info .. L["Only you are on this quest."] .. "|r",
   })[q.status]
   if statusText then parts[#parts + 1] = statusText end
-  parts[#parts + 1] = "|cff9d9d9dQuest ID|r  " .. (q.id or 0)
+  parts[#parts + 1] = Theme.C.muted .. L["Quest ID"] .. "|r  " .. (q.id or 0)
   parts[#parts + 1] = " "
 
   -- Your side: real per-objective text when we're actually on the quest; else the
   -- synced aggregate (and never call the API in demo mode — ids are fabricated).
-  parts[#parts + 1] = "|cffffd100Your progress|r"
+  parts[#parts + 1] = Theme.C.gold .. L["Your progress"] .. "|r"
   local objs = (not ns.db.demoMode) and C_QuestLog and C_QuestLog.GetQuestObjectives
     and C_QuestLog.GetQuestObjectives(q.id) or nil
   if objs and #objs > 0 then
     for _, o in ipairs(objs) do
-      parts[#parts + 1] = (o.finished and "|cff44ff44" or "|cffd0d0d0") .. (o.text or "") .. "|r"
+      parts[#parts + 1] = (o.finished and Theme.C.ready or Theme.C.soft) .. (o.text or "") .. "|r"
     end
   else
     parts[#parts + 1] = prog(q.you)
   end
   parts[#parts + 1] = " "
-  parts[#parts + 1] = "|cffffd100Partner progress|r"
+  parts[#parts + 1] = Theme.C.gold .. L["Partner progress"] .. "|r"
   parts[#parts + 1] = prog(q.partner)
 
   panel.detailQChip:Hide(); panel.detailQLabel:Hide()
@@ -384,25 +384,25 @@ local function renderAchvDetail()
   panel.detailChip.icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
   panel.detailChip.icon:SetTexture(a.icon or 134400)
   panel.detailChip:Show()
-  panel.detailName:SetText(a.name or ("Achievement #" .. (a.id or 0)))
+  panel.detailName:SetText(a.name or (L["Achievement #"] .. (a.id or 0)))
   if a.together then panel.detailName:SetTextColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3])
   else panel.detailName:SetTextColor(Theme.CREAM[1], Theme.CREAM[2], Theme.CREAM[3]) end
 
   local parts = {}
   if a.together then
-    parts[#parts + 1] = "|cff44ff44You both earned this the same day.|r"
+    parts[#parts + 1] = Theme.C.ready .. L["You both earned this the same day."] .. "|r"
   else
-    local st = ({ youOnly = "|cff6cb6ffOnly you have earned this.|r",
-                  partnerOnly = "|cffffcc33Only your partner has earned this.|r" })[a.status]
+    local st = ({ youOnly = Theme.C.info .. L["Only you have earned this."] .. "|r",
+                  partnerOnly = Theme.C.warn .. L["Only your partner has earned this."] .. "|r" })[a.status]
     if st then parts[#parts + 1] = st end
   end
-  if (a.points or 0) > 0 then parts[#parts + 1] = "|cffffd100" .. a.points .. " points|r" end
+  if (a.points or 0) > 0 then parts[#parts + 1] = Theme.C.gold .. a.points .. L[" points"] .. "|r" end
   parts[#parts + 1] = " "
   if a.desc and a.desc ~= "" then
-    parts[#parts + 1] = "|cffd0d0d0" .. a.desc .. "|r"; parts[#parts + 1] = " "
+    parts[#parts + 1] = Theme.C.soft .. a.desc .. "|r"; parts[#parts + 1] = " "
   end
-  parts[#parts + 1] = "|cffffd100You|r  " .. (a.youStr or "|cff808080not earned|r")
-  parts[#parts + 1] = "|cffffd100Partner|r  " .. (a.partnerStr or "|cff808080not earned|r")
+  parts[#parts + 1] = Theme.C.gold .. L["You"] .. "|r  " .. (a.youStr or (Theme.C.dim .. L["not earned"] .. "|r"))
+  parts[#parts + 1] = Theme.C.gold .. L["Partner"] .. "|r  " .. (a.partnerStr or (Theme.C.dim .. L["not earned"] .. "|r"))
 
   panel.detailQChip:Hide(); panel.detailQLabel:Hide()
   panel.detailText:ClearAllPoints()
