@@ -50,13 +50,11 @@ local function build(host)
   exInfo:SetJustifyH("CENTER"); exInfo:SetSpacing(6); exInfo:SetWidth(MODEL_W)
   local ff = GameFontHighlight:GetFont(); if ff then exInfo:SetFont(ff, 16) end
   f.exInfo = exInfo
-  local exVerdict = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  exVerdict:SetJustifyH("CENTER"); exVerdict:SetWidth(MODEL_W)
-  if ff then exVerdict:SetFont(ff, 22) end
-  f.exVerdict = exVerdict
 
+  -- This page shows only the Readiness and Now columns (gear/quest/supplies live
+  -- on their own tabs), so only those two section headers are built.
   f.headers = {}
-  for _, k in ipairs({ "readiness", "activity", "status", "gear", "quest" }) do
+  for _, k in ipairs({ "readiness", "activity" }) do
     f.headers[k] = Widgets.SectionHeader(f)
   end
   f.rows = {}
@@ -65,18 +63,11 @@ local function build(host)
   end
   f.nowRows = {}
   for i = 1, 4 do f.nowRows[i] = Row.CreateInfo(f, Theme.ICON.bags) end
-  f.bodies = {}
-  for _, k in ipairs({ "activity", "status", "gear", "quest" }) do
-    local b = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    b:SetJustifyH("LEFT"); b:SetJustifyV("TOP"); b:SetSpacing(7)
-    if ff then b:SetFont(ff, 15) end
-    f.bodies[k] = b
-  end
   return f
 end
 
 local function refresh(f, ctx)
-  local snap, verdict, W = ctx.snap, ctx.verdict, ctx.width
+  local snap, W = ctx.snap, ctx.width
   local r, g, b = ctx.r, ctx.g, ctx.b
   f:SetWidth(W)
 
@@ -109,16 +100,12 @@ local function refresh(f, ctx)
   if (snap.ilvl or 0) > 0 then table.insert(l2, "|cffffd100" .. snap.ilvl .. "|r ilvl") end
   if #l2 > 0 then table.insert(info, table.concat(l2, "  ·  ")) end
   f.exInfo:ClearAllPoints(); f.exInfo:SetPoint("TOP", f.modelBox, "BOTTOM", 0, -12); f.exInfo:SetText(table.concat(info, "\n"))
-  f.exVerdict:Hide()   -- verdict already shown in the title bar
 
   -- Decluttered: model | Readiness | Now (gear/quest/supplies live on their tabs)
   local rcX = MODEL_W + 48
   local READY_W = 320
   local nowX = rcX + READY_W + COL_GAP + 10
   local nowW = math.max(220, W - nowX)
-
-  -- hide unused headers/bodies
-  for _, k in ipairs({ "status", "gear", "quest" }) do Widgets.HideHeader(f.headers[k]); f.bodies[k]:Hide() end
 
   -- Readiness
   f.headers.readiness.label:ClearAllPoints()
@@ -138,7 +125,6 @@ local function refresh(f, ctx)
   local col1H = Theme.HEADER_H + count * (Row.HEIGHT + ROW_GAP)
 
   -- Now (current activity + location) — rendered as chip info-rows like Readiness
-  f.bodies.activity:Hide()
   local items = {}
   if (snap.zone or "") ~= "" then
     items[#items + 1] = { icon = Theme.I_LOC, label = L["Location"], value = snap.zone .. (snap.rest and "  |cff6cb6ff(resting)|r" or "") }
@@ -160,11 +146,11 @@ local function refresh(f, ctx)
     Widgets.StyleHeader(f.headers.activity, L["Now"], nowW)
     local anchor2 = f.headers.activity.diamond
     for i, it in ipairs(items) do
-      local r = f.nowRows[i]
-      r:SetShown(true); r:SetWidth(nowW); r:SetIcon(it.icon); r:Set(it.label, it.value)
-      r.frame:ClearAllPoints()
-      r.frame:SetPoint("TOPLEFT", anchor2, "BOTTOMLEFT", anchor2 == f.headers.activity.diamond and -3 or 0, anchor2 == f.headers.activity.diamond and -8 or -ROW_GAP)
-      anchor2 = r.frame
+      local nr = f.nowRows[i]
+      nr:SetShown(true); nr:SetWidth(nowW); nr:SetIcon(it.icon); nr:Set(it.label, it.value)
+      nr.frame:ClearAllPoints()
+      nr.frame:SetPoint("TOPLEFT", anchor2, "BOTTOMLEFT", anchor2 == f.headers.activity.diamond and -3 or 0, anchor2 == f.headers.activity.diamond and -8 or -ROW_GAP)
+      anchor2 = nr.frame
     end
     col2H = Theme.HEADER_H + #items * (Row.HEIGHT + ROW_GAP)
   else

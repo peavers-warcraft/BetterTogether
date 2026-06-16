@@ -36,7 +36,6 @@ local shouldShow = true
 
 local function hostWidth(detail) return WIDTH_EXPANDED - HOST_X - PAD - (detail and (DETAIL_W + 18) or 0) end
 local function scrollWidth(detail) return hostWidth(detail) - SCROLLBAR_W end
-local function innerHeight() return PANEL_H_EXPANDED - CONTENT_TOP - 2 * PAD end
 
 -- ---------------------------------------------------------------------------
 -- Page registry (pages register at load; built lazily on first Select)
@@ -45,7 +44,6 @@ local function innerHeight() return PANEL_H_EXPANDED - CONTENT_TOP - 2 * PAD end
 --- @param desc table { key, label, order, detail?, detailTitle?, detailHint?,
 ---   separator?, build(host)->frame, refresh(frame, ctx)->height, onShow? }
 function Dashboard.RegisterPage(desc)
-  -- desc = { key, label, order, stub, build(host)->frame, refresh(frame, ctx)->height }
   table.insert(pages, desc)
   pagesByKey[desc.key] = desc
 end
@@ -221,30 +219,6 @@ local compact
 -- ---------------------------------------------------------------------------
 -- Item detail renderer (custom, non-tooltip — styled as part of the addon)
 -- ---------------------------------------------------------------------------
--- The detail pane reuses Widgets.Chip; its `.rim` recolors to the item's quality.
-local function ensureDetailLine(i)
-  if panel.detailLines[i] then return panel.detailLines[i] end
-  local fs = panel.detailBody:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  fs:SetJustifyH("LEFT"); fs:SetJustifyV("TOP"); fs:SetWidth(DETAIL_W - 8)
-  local ff = GameFontHighlight:GetFont(); if ff then fs:SetFont(ff, 13) end
-  panel.detailLines[i] = fs
-  return fs
-end
-
--- A tooltip line that carries an embedded icon (e.g. a granted buff): chip + text.
-local function ensureChipLine(i)
-  if panel.detailChipLines[i] then return panel.detailChipLines[i] end
-  local f = CreateFrame("Frame", nil, panel.detailBody); f:SetWidth(DETAIL_W - 8)
-  local chip = Widgets.Chip(f, 24); chip:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
-  local fs = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  fs:SetPoint("LEFT", chip, "RIGHT", 8, 0); fs:SetPoint("RIGHT", f, "RIGHT", 0, 0)
-  fs:SetJustifyH("LEFT"); fs:SetJustifyV("MIDDLE")
-  local ff = GameFontHighlight:GetFont(); if ff then fs:SetFont(ff, 13) end
-  local o = { frame = f, chip = chip, fs = fs }
-  panel.detailChipLines[i] = o
-  return o
-end
-
 local function renderItemDetail()
   local id = panel._detailID
   if not id then return end
@@ -584,9 +558,6 @@ function Dashboard.Init()
   local dff = GameFontHighlight:GetFont(); if dff then dt:SetFont(dff, 13) end
   dt:Hide(); panel.detailText = dt
 
-  panel.detailLines = {}
-  panel.detailChipLines = {}
-
   -- crafting-quality shown as one of our chips
   local qchip = Widgets.Chip(body, 30); qchip:Hide(); panel.detailQChip = qchip
   local qlbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -645,6 +616,9 @@ function Dashboard.RestorePosition()
   panel:ClearAllPoints()
   panel:SetPoint(p[1] or "CENTER", UIParent, p[3] or "CENTER", p[4] or 0, p[5] or 0)
 end
+-- Intentional no-op: the lock state (ns.db.locked) is enforced lazily inside the
+-- drag handlers (OnDragStart bails when locked), so there is nothing to re-apply
+-- when it toggles. Kept as a stable hook for callers (Settings, /dr lock).
 function Dashboard.ApplyLock() end
 function Dashboard.SetScale(s) ns.db.scale = s; if panel then panel:SetScale(s) end end
 function Dashboard.Show() shouldShow = true; if panel then panel:Show() end end

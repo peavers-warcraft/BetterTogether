@@ -37,21 +37,13 @@ local COMPARE_DEFS = {
 -- Derived "Records" — milestones computed from the raw counters (no extra
 -- tracking). own/partner are the two stat tables; shared(k) is the max-merged
 -- "together" value for a shared counter.
---
--- LEARNING CONTRIBUTION: this is where domain judgment lives — which milestones
--- actually feel meaningful to a duo, and how to derive them. The primitives you
--- have to work with are pre-computed below (bestKey, timedPct, etc.). Return a
--- list of { icon=, label=, value= } rows. A couple are filled in as
--- examples; add the ones you think matter and tune the formatting/colors.
 -- ---------------------------------------------------------------------------
 local function computeRecords(own, partner, shared)
   local runs = own.mplusRuns or {}
-  local bestKey, timed = 0, 0
+  local bestKey = 0
   for _, r in ipairs(runs) do
     if (r.level or 0) > bestKey then bestKey = r.level end
-    if r.onTime then timed = timed + 1 end
   end
-  local timedPct = (#runs > 0) and math.floor(timed / #runs * 100 + 0.5) or 0
 
   -- "Together since" — earliest grouped timestamp (min-merged across the pair).
   local sinceVal = "—"
@@ -62,19 +54,11 @@ local function computeRecords(own, partner, shared)
     sinceVal = "|cffffffff" .. when .. "|r  |cff44ff44(" .. days .. "d)|r"
   end
 
-  local rows = {
+  return {
     { icon = Theme.I_TIME, label = L["Together since"], value = sinceVal },
     { icon = Theme.I_KEY,  label = L["Best key"],
       value = bestKey > 0 and ("|cffa335ee+" .. bestKey .. "|r") or "—" },
   }
-
-  -- TODO(you): add the records you care about. Ideas using the primitives above:
-  --   • Timed runs %  →  value = timedPct .. "%"   (color by threshold?)
-  --   • Boss kills per wipe  →  shared("bosses") / max(1, shared("wipes"))
-  --   • K/D ratio  →  own.mobs / max(1, own.deaths)
-  -- Append { icon=, label=, value= } entries to `rows` here.
-
-  return rows
 end
 
 -- ---------------------------------------------------------------------------
