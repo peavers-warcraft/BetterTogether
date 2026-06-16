@@ -22,7 +22,8 @@ local GetTime = GetTime
 
 local MSG = {
   HELLO = "HELLO", SNAP = "SNAP", CARD = "CARD", REQ = "REQ", BYE = "BYE",
-  STATS = "STATS",
+  STATS = "STATS", PRIV = "PRIV",   -- PRIV = privacy manifest (what we won't share)
+  PING = "PING", PONG = "PONG",   -- presence handshake for non-active roster members
   INV = "INV", INVREQ = "INVREQ",
   INVITEM = "INVITEM", INVITEMREQ = "INVITEMREQ",
   QLOG = "QLOG", QLOGREQ = "QLOGREQ",
@@ -146,9 +147,15 @@ local function reassemble(key, i, total, chunk, onComplete)
   end
 end
 
+-- Proactive data pushes only make sense to a live partner. Skipping them while
+-- unlinked is what stops us whispering SNAP/CARD into the void after the partner
+-- logs off (handshake/REQ responses set linked before calling these, so those
+-- still go out).
+local function haveLiveLink() return ns.state.linked or Comm.selftest end
+
 local function doSendSnapshot()
   snapPending = false
-  if ns:InCombat() then return end
+  if ns:InCombat() or not haveLiveLink() then return end
   ns.SelfState.Update()
   local payload = ns.Snapshot.Encode()
   send(MSG.SNAP .. "|" .. ns.PROTO .. "|" .. payload)
@@ -158,7 +165,7 @@ end
 
 local function doSendCard()
   cardPending = false
-  if ns:InCombat() then return end
+  if ns:InCombat() or not haveLiveLink() then return end
   ns.SelfState.Update()
   local payload = ns.Snapshot.EncodeCard()
   send(MSG.CARD .. "|" .. ns.PROTO .. "|" .. payload)
@@ -200,7 +207,7 @@ end
 
 local function doSendStats()
   statsPending = false
-  if not ns.Snapshot.EncodeStats then return end
+  if not ns.Snapshot.EncodeStats or not haveLiveLink() or not ns.Shares("stats") then return end
   local payload = ns.Snapshot.EncodeStats()
   send(MSG.STATS .. "|" .. ns.PROTO .. "|" .. payload)
   lastStatsAt = GetTime()
@@ -228,6 +235,14 @@ end
 function Comm.SendHello()
   if ns:InCombat() then return end
   send(MSG.HELLO .. "|" .. ns.PROTO .. "|" .. (UnitName("player") or "?"))
+end
+
+-- Broadcast our privacy manifest so the partner can label hidden fields instead of
+-- waiting on data that will never come. Sent on handshake/REQ and whenever the user
+-- changes a toggle (see the Privacy page).
+function Comm.SendPrivacy()
+  if not ns.Snapshot.EncodePrivacy then return end
+  send(MSG.PRIV .. "|" .. ns.PROTO .. "|" .. ns.Snapshot.EncodePrivacy())
 end
 
 function Comm.RequestSnapshot()
@@ -258,6 +273,7 @@ end
 function Comm.SendInventory()
   if not (ns.InvSync) then return end
   if not partnerTarget() and not Comm.selftest then return end
+  if not ns.Shares("inventory") then return end
   sendChunked(MSG.INV, ns.InvSync.Encode(), "INV")
 end
 
@@ -269,6 +285,7 @@ function Comm.RequestItemDetail(id)
 end
 function Comm.SendItemDetail(id)
   if not ns.InvSync then return end
+  if not ns.Shares("inventory") then return end
   local str = ns.InvSync.ResolveItemString(id)
   if str then send(MSG.INVITEM .. "|" .. id .. "|" .. str) end
 end
@@ -280,6 +297,7 @@ end
 function Comm.SendQuests()
   if not (ns.QuestSync) then return end
   if not partnerTarget() and not Comm.selftest then return end
+  if not ns.Shares("questlog") then return end
   sendChunked(MSG.QLOG, ns.QuestSync.Encode(), "QLOG")
 end
 
@@ -292,6 +310,7 @@ end
 function Comm.SendAchvDigest()
   if not ns.AchvSync then return end
   if not partnerTarget() and not Comm.selftest then return end
+  if not ns.Shares("achievements") then return end
   -- Wait for the (async) achievement scan so we never block the frame encoding it.
   ns.AchvSync.Ensure(function()
     sendChunked(MSG.ACHVDIG, ns.AchvSync.EncodeDigest(), "ACHVDIG")
@@ -303,6 +322,7 @@ end
 function Comm.SendAchvEra(era)
   if not ns.AchvSync then return end
   if not partnerTarget() and not Comm.selftest then return end
+  if not ns.Shares("achievements") then return end
   era = tonumber(era); if not era then return end
   ns.AchvSync.Ensure(function()
     sendChunked(MSG.ACHV, ns.AchvSync.EncodeEra(era), "ACHV era " .. era, era)
@@ -322,10 +342,56 @@ end
 local function softUnlink(reason)
   ns.state.linked = false
   ns.state.partner = nil
+  ns.state.partnerPrivacy = nil
   ns:Debug("softUnlink: " .. tostring(reason))
   if ns.Dashboard then ns.Dashboard.Refresh() end
 end
 Comm.SoftUnlink = softUnlink
+
+-- ---------------------------------------------------------------------------
+-- Roster presence (who's reachable among the *saved* partners)
+--   The active partner's online state is ns.state.linked, kept fresh by the
+--   HELLO/SNAP handshake. Saved (non-active) partners have no live link, so we
+--   PING them (a tiny handshake that bypasses the bond gate, like INVITE) and
+--   stamp the time we last heard a PONG back. The Partners page reads IsOnline to
+--   decide whether "Set active" is clickable — you can't switch to someone who
+--   isn't there to sync with.
+-- ---------------------------------------------------------------------------
+local PRESENCE_FRESH = 35   -- seconds a PONG keeps a partner "online" in the UI
+local presence = {}         -- shortName():lower() -> GetTime() of last PONG
+
+-- Record a fresh sighting. Returns true only when the partner *transitioned*
+-- offline -> online, so callers refresh the UI on the edge instead of on every
+-- PONG (a small roster pinging in lockstep would otherwise restack refreshes).
+local function markSeen(name)
+  local short = ns.Util.ShortName(name)
+  if not short then return false end
+  local key = short:lower()
+  local was = presence[key]
+  presence[key] = GetTime()
+  return was == nil or (GetTime() - was) > PRESENCE_FRESH
+end
+
+--- Is a roster member currently reachable? The active partner uses the live link;
+--- everyone else uses their most recent PONG.
+--- @param name string A character name (short or full).
+--- @return boolean
+function Comm.IsOnline(name)
+  local short = ns.Util.ShortName(name)
+  if not short then return false end
+  if ns.Pairing and ns.Pairing.IsBonded(short) then return ns.state.linked == true end
+  local t = presence[short:lower()]
+  return t ~= nil and (GetTime() - t) <= PRESENCE_FRESH
+end
+
+--- Ping every saved roster member (except ourselves) to refresh their presence.
+--- Cheap (one tiny whisper each); the Partners page calls this while it's visible.
+function Comm.PingRoster()
+  if not (ns.Pairing and ns.Pairing.Roster) then return end
+  for _, full in ipairs(ns.Pairing.Roster()) do
+    if not ns.Util.IsSelf(full) then Comm.WhisperTo(full, MSG.PING) end
+  end
+end
 
 -- ---------------------------------------------------------------------------
 -- Inbound dispatch
@@ -354,6 +420,20 @@ local function dispatch(text, senderShort, trusted)
     return
   end
 
+  -- Presence handshake — handled regardless of the bond gate so we can detect
+  -- roster members who aren't our *active* partner. We only answer/record for
+  -- people actually in our roster (pairing is mutual), never random probers, and
+  -- reply to a PING with PONG so the other side stamps us as online too.
+  if mtype == MSG.PING or mtype == MSG.PONG then
+    local full = ns.Pairing and ns.Pairing.InRoster(senderShort)
+    if full then
+      local appeared = markSeen(senderShort)
+      if mtype == MSG.PING then Comm.WhisperTo(full, MSG.PONG) end
+      if appeared and ns.Dashboard then ns.Dashboard.Refresh() end
+    end
+    return
+  end
+
   -- Everything else must come from the bonded partner (or be trusted/self-test).
   if not (trusted or Comm.selftest) then
     if not (ns.Pairing and ns.Pairing.IsBonded(senderShort)) then
@@ -371,6 +451,7 @@ local function dispatch(text, senderShort, trusted)
     Comm.QueueSnapshot(true)
     Comm.QueueCard(true)
     Comm.QueueStats(true)
+    Comm.SendPrivacy()
 
   elseif mtype == MSG.SNAP then
     local payload = stripProto(rest)
@@ -397,6 +478,12 @@ local function dispatch(text, senderShort, trusted)
     Comm.QueueSnapshot(true)
     Comm.QueueCard(true)
     Comm.QueueStats(true)
+    Comm.SendPrivacy()
+
+  elseif mtype == MSG.PRIV then
+    markLinked()
+    ns.state.partnerPrivacy = ns.Snapshot.DecodePrivacy(stripProto(rest))
+    if ns.Dashboard then ns.Dashboard.Refresh() end
 
   elseif mtype == MSG.STATS then
     local payload = stripProto(rest)
@@ -499,6 +586,7 @@ function Comm.RunLoopbackTest()
   ns.SelfState.Update()
   Comm.Inject(MSG.HELLO .. "|" .. ns.PROTO .. "|TestPartner")
   Comm.Inject(MSG.CARD .. "|" .. ns.PROTO .. "|" .. ns.Snapshot.EncodeCard())
+  Comm.Inject(MSG.PRIV .. "|" .. ns.PROTO .. "|" .. ns.Snapshot.EncodePrivacy())
   local payload = ns.Snapshot.Encode()
   Comm.Inject(MSG.SNAP .. "|" .. ns.PROTO .. "|" .. payload)
   ns.state.partnerName = "TestPartner"
@@ -539,7 +627,21 @@ end
 
 function Comm.Init()
   C_Timer.NewTicker(RECONNECT_INTERVAL, function()
-    if ns.Pairing and ns.Pairing.PartnerName() and not ns.state.linked then
+    if not (ns.Pairing and ns.Pairing.PartnerName()) then return end
+    if ns.state.linked then
+      -- Linked: watch for the partner going quiet. A logout BYE can be dropped, so
+      -- silence is our backstop signal. A short gap just earns a nudge — an online
+      -- but idle partner answers and stays linked — while silence past OFFLINE_AFTER
+      -- means they've logged off, so we drop the live link (the dashboard flips to
+      -- "offline" and we stop streaming data at them). Reconnect resumes below.
+      local since = GetTime() - ((ns.state.partner and ns.state.partner.lastSeen) or 0)
+      if since > ns.OFFLINE_AFTER then
+        softUnlink("partner silent past offline cutoff")
+      elseif since > RECONNECT_INTERVAL then
+        ns:Debug("partner quiet, nudging")
+        Comm.SendHello()
+      end
+    else
       ns:Debug("reconnect: pinging partner")
       Comm.SendHello()
     end

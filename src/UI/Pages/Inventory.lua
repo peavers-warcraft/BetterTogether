@@ -63,9 +63,17 @@ local function bucketFor(classID)
 end
 
 local function getSections(snap)
+  -- Checked before cached data: turning sharing off stops the feed but we may still
+  -- hold their last bags, so the opt-out message must win over a stale list.
+  if not ns.db.demoMode and not ns.PartnerShares("inventory") then
+    return { { title = L["Inventory"],
+      text = "|cff808080" .. L["Your partner has turned off sharing their inventory."] .. "|r" } }
+  end
+
   local inv = (ns.db.demoMode and S.demoInv()) or (ns.state.partner and ns.state.partner.inv) or {}
   if #inv == 0 then
-    return { { title = L["Inventory"], text = "|cff808080" .. L["Waiting for your partner's bags… (a request is sent when you open this tab)."] .. "|r" } }
+    return { { title = L["Inventory"],
+      text = "|cff808080" .. L["Waiting for your partner's bags… (a request is sent when you open this tab)."] .. "|r" } }
   end
 
   local groups = {}

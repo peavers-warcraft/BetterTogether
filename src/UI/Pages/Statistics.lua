@@ -160,10 +160,17 @@ local function refresh(f, ctx)
   -- LEFT: You vs Partner
   f.cHeader.label:ClearAllPoints(); f.cHeader.label:SetPoint("TOPLEFT", tileAnchor, "BOTTOMLEFT", 3, -SECTION_GAP)
   Widgets.StyleHeader(f.cHeader, L["You vs Partner"], leftW)
+  -- When the partner isn't sharing stats, their counters arrive as zero; label that
+  -- side "hidden" instead of implying they've done nothing.
+  local statsHidden = not ns.db.demoMode and not ns.PartnerShares("stats")
   for i, def in ipairs(COMPARE_DEFS) do
     local r = f.cRows[i]
     r:SetIcon(def.icon)
-    r:Set(def.label, compareVal(own[def.key], partner[def.key]))
+    if statsHidden then
+      r:Set(def.label, "|cffffffff" .. L["You "] .. fmtNum(own[def.key]) .. "|r    |cff808080" .. L["Partner hidden"] .. "|r")
+    else
+      r:Set(def.label, compareVal(own[def.key], partner[def.key]))
+    end
   end
   local _, leftH = stackRows(f.cRows, #COMPARE_DEFS, f.cHeader.diamond, leftW)
 

@@ -27,6 +27,13 @@ local HEAD_PAD = 10          -- top padding between a section header's rule and 
 local FONT = GameFontHighlight:GetFont()
 local function setFont(obj, size) if FONT then obj:SetFont(FONT, size, "") end end
 
+-- Inline status glyphs. Textures (sized to the line height with ":0"), not font
+-- characters — the old ● / ○ bullets rendered as tofu boxes on some clients' fonts.
+local ICON_CONNECTED = "|TInterface\\RAIDFRAME\\ReadyCheck-Ready:0|t"
+local ICON_WAITING   = "|TInterface\\RAIDFRAME\\ReadyCheck-Waiting:0|t"
+local DOT_ONLINE  = "|T" .. Theme.INDICATOR.ready .. ":0|t"
+local DOT_OFFLINE = "|T" .. Theme.INDICATOR.offline .. ":0|t"
+
 -- Wire Blizzard's player-name autocomplete onto an EditBox — the same dropdown
 -- the whisper / Add-Friend fields use, so typing "Am" suggests "Amy-Spirestone"
 -- with the realm correctly normalized. Routed through C_AutoComplete + the
@@ -157,9 +164,9 @@ local function refreshHero(card, active, short)
   if linked then
     local ago = (p and p.lastSeen) and (GetTime() - p.lastSeen) or nil
     local when = (ago and ago > 2) and ("  ·  " .. L["synced "] .. S.fmtTime(ago) .. L[" ago"]) or ("  ·  " .. L["syncing live"])
-    card.status:SetText("|cff44ff44● " .. L["Connected"] .. "|r|cff7a7a7a" .. when .. "|r")
+    card.status:SetText(ICON_CONNECTED .. " |cff44ff44" .. L["Connected"] .. "|r|cff7a7a7a" .. when .. "|r")
   else
-    card.status:SetText("|cffe0a020○ " .. L["Waiting for sync…"] .. "|r |cff7a7a7a" .. L["(they may be offline)"] .. "|r")
+    card.status:SetText(ICON_WAITING .. " |cffe0a020" .. L["Waiting for sync…"] .. "|r |cff7a7a7a" .. L["(they may be offline)"] .. "|r")
   end
 
   -- meta (spec/class · level · ilvl) when we have a snapshot
@@ -197,7 +204,7 @@ local function makeRow(parent)
 
   local dot = row:CreateFontString(nil, "OVERLAY")
   dot:SetPoint("LEFT", row, "LEFT", 14, 0); setFont(dot, 13)
-  dot:SetText("|cff666666○|r")
+  dot:SetText(DOT_OFFLINE)   -- refreshed per online state in refresh()
   row.dot = dot
 
   local name = row:CreateFontString(nil, "OVERLAY")
@@ -255,6 +262,17 @@ local function build(host)
   inviteBtn:SetScript("OnClick", doInvite)
   f.inviteBtn = inviteBtn
 
+  -- Presence: while this page is visible, ping saved partners so "Set active"
+  -- tracks who's actually online. PONGs refresh us on the online edge (Comm);
+  -- the ticker also re-renders so a partner who goes quiet drops back to disabled.
+  f:SetScript("OnShow", function() if ns.Comm then ns.Comm.PingRoster() end end)
+  C_Timer.NewTicker(8, function()
+    if f:IsVisible() and ns.Comm then
+      ns.Comm.PingRoster()
+      if ns.Dashboard then ns.Dashboard.Refresh() end
+    end
+  end)
+
   f.rows = {}
   return f
 end
@@ -299,7 +317,17 @@ local function refresh(f, ctx)
       row:SetWidth(W)
       row:Show()
       row.nameFS:SetText(short(full))
-      row.setActive:SetScript("OnClick", function() if ns.Pairing then ns.Pairing.SetActive(full) end end)
+
+      -- You can only switch to a partner who's actually online to sync with, so
+      -- gate "Set active" on their presence (see ns.Comm.IsOnline / PingRoster).
+      local online = ns.Comm and ns.Comm.IsOnline(full)
+      row.dot:SetText(online and DOT_ONLINE or DOT_OFFLINE)
+      row.setActive:SetEnabledState(online,
+        L["%s appears to be offline — you can only switch to a partner who's online."]:format(short(full)))
+      row.setActive:SetScript("OnClick", function(self)
+        if self._disabled then return end
+        if ns.Pairing then ns.Pairing.SetActive(full) end
+      end)
       row.remove:SetScript("OnClick", function() if ns.Pairing then ns.Pairing.RemoveFromRoster(full) end end)
       y = y - (ROW_H + ROW_GAP)
     end

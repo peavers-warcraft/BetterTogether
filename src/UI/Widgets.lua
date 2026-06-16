@@ -90,15 +90,44 @@ function Widgets.Button(parent, text, w, h)
   b.fs = fs
 
   b:SetScript("OnEnter", function(self)
+    if self._disabled then
+      if self._disabledTip then
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:AddLine(self._disabledTip, GOLD[1], GOLD[2], GOLD[3], true)
+        GameTooltip:Show()
+      end
+      return
+    end
     self:SetBackdropColor(Theme.BG_BUTTON_HOVER[1], Theme.BG_BUTTON_HOVER[2], Theme.BG_BUTTON_HOVER[3], 0.95)
     self:SetBackdropBorderColor(GOLD[1], GOLD[2], GOLD[3], 1)
   end)
   b:SetScript("OnLeave", function(self)
+    GameTooltip:Hide()
+    if self._disabled then return end
     self:SetBackdropColor(Theme.BG_BUTTON[1], Theme.BG_BUTTON[2], Theme.BG_BUTTON[3], 0.9)
     self:SetBackdropBorderColor(GOLD[1], GOLD[2], GOLD[3], 0.75)
   end)
-  b:SetScript("OnMouseDown", function(self) self.fs:SetPoint("CENTER", 1, -1) end)
-  b:SetScript("OnMouseUp", function(self) self.fs:SetPoint("CENTER", 0, 0) end)
+  b:SetScript("OnMouseDown", function(self) if not self._disabled then self.fs:SetPoint("CENTER", 1, -1) end end)
+  b:SetScript("OnMouseUp", function(self) if not self._disabled then self.fs:SetPoint("CENTER", 0, 0) end end)
+
+  -- Disabled state: greys the button and surfaces `disabledTip` on hover instead
+  -- of the press affordance. Callers still guard their OnClick on `_disabled`
+  -- (a custom Button has no native click-suppression). Used by the Partners page
+  -- to block switching to an offline partner.
+  b._disabled = false
+  function b:SetEnabledState(enabled, disabledTip)
+    self._disabled = not enabled
+    self._disabledTip = disabledTip
+    if enabled then
+      self:SetBackdropColor(Theme.BG_BUTTON[1], Theme.BG_BUTTON[2], Theme.BG_BUTTON[3], 0.9)
+      self:SetBackdropBorderColor(GOLD[1], GOLD[2], GOLD[3], 0.75)
+      self.fs:SetTextColor(CREAM[1], CREAM[2], CREAM[3])
+    else
+      self:SetBackdropColor(Theme.BG_BUTTON[1], Theme.BG_BUTTON[2], Theme.BG_BUTTON[3], 0.4)
+      self:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.5)
+      self.fs:SetTextColor(Theme.SUBHEADER_COLOR[1], Theme.SUBHEADER_COLOR[2], Theme.SUBHEADER_COLOR[3])
+    end
+  end
   return b
 end
 

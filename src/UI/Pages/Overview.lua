@@ -124,20 +124,24 @@ local function refresh(f, ctx)
   end
   local col1H = Theme.HEADER_H + count * (Row.HEIGHT + ROW_GAP)
 
-  -- Now (current activity + location) — rendered as chip info-rows like Readiness
+  -- Now (current activity + location) — rendered as chip info-rows like Readiness.
+  -- A field the partner has hidden keeps its row but shows a muted "Hidden" instead
+  -- of vanishing; a field they share but have no value for is simply omitted.
   local items = {}
-  if (snap.zone or "") ~= "" then
-    items[#items + 1] = { icon = Theme.I_LOC, label = L["Location"], value = snap.zone .. (snap.rest and ("  |cff6cb6ff" .. L["(resting)"] .. "|r") or "") }
+  local function add(shareKey, icon, label, present, value)
+    if not ns.PartnerShares(shareKey) then
+      items[#items + 1] = { icon = icon, label = label, value = Theme.C.muted .. L["Hidden"] .. "|r" }
+    elseif present then
+      items[#items + 1] = { icon = icon, label = label, value = value }
+    end
   end
-  if (snap.cx or 0) > 0 or (snap.cy or 0) > 0 then
-    items[#items + 1] = { icon = Theme.I_COORDS, label = L["Coordinates"], value = string.format("%.1f, %.1f", snap.cx or 0, snap.cy or 0) }
-  end
-  if (snap.key or "") ~= "" and (snap.klvl or 0) > 0 then
-    items[#items + 1] = { icon = Theme.I_KEY, label = L["Keystone"], value = "|cffa335ee" .. S.midTruncate(snap.key, 16) .. " +" .. snap.klvl .. "|r" }
-  end
-  if (snap.gold or 0) > 0 then
-    items[#items + 1] = { icon = Theme.I_GOLD, label = L["Gold"], value = S.fmtGold(snap.gold) }
-  end
+  add("location", Theme.I_LOC, L["Location"], (snap.zone or "") ~= "",
+    (snap.zone or "") .. (snap.rest and ("  |cff6cb6ff" .. L["(resting)"] .. "|r") or ""))
+  add("coords", Theme.I_COORDS, L["Coordinates"], (snap.cx or 0) > 0 or (snap.cy or 0) > 0,
+    string.format("%.1f, %.1f", snap.cx or 0, snap.cy or 0))
+  add("keystone", Theme.I_KEY, L["Keystone"], (snap.key or "") ~= "" and (snap.klvl or 0) > 0,
+    "|cffa335ee" .. S.midTruncate(snap.key or "", 16) .. " +" .. (snap.klvl or 0) .. "|r")
+  add("gold", Theme.I_GOLD, L["Gold"], (snap.gold or 0) > 0, S.fmtGold(snap.gold or 0))
 
   local col2H = 0
   if #items > 0 then

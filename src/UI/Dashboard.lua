@@ -82,21 +82,26 @@ function Dashboard.RegisterPage(desc)
 end
 
 -- ---------------------------------------------------------------------------
--- Shared partner context (snap + verdict + alpha)
+-- Shared partner context (snap + verdict). The "wait" verdict surfaces in the
+-- title bar as the sync/waiting indicator; we no longer dim the whole panel for
+-- it (the fade read as an ugly translucent window).
 -- ---------------------------------------------------------------------------
 local function getContext()
   if ns.db.demoMode then
     local snap = S.demoSnap()
     ns.state.partnerName = "AMY"
-    return snap, ns.Snapshot.ComputeVerdict(snap, ns.db), 1.0
+    return snap, ns.Snapshot.ComputeVerdict(snap, ns.db)
   end
+  local bonded = ns.Pairing and ns.Pairing.PartnerName()
   local partner = ns.state.partner
   if not ns.state.linked or not partner then
-    ns.state.partnerName = (ns.Pairing and ns.Pairing.PartnerName() and ns.Pairing.ShortName(ns.Pairing.PartnerName())) or L["not paired"]
-    return {}, "wait", 0.9
+    ns.state.partnerName = (bonded and ns.Pairing.ShortName(bonded)) or L["not paired"]
+    -- A bonded partner with no live link has logged off (or hasn't come online
+    -- yet): show a calm "offline" rather than a "waiting/syncing" indicator.
+    return {}, bonded and "offline" or "wait"
   end
   local stale = (GetTime() - (partner.lastSeen or 0)) > ns.STALE_AFTER
-  return partner, stale and "wait" or ns.Snapshot.ComputeVerdict(partner, ns.db), stale and 0.55 or 1.0
+  return partner, stale and "wait" or ns.Snapshot.ComputeVerdict(partner, ns.db)
 end
 Dashboard.GetContext = getContext
 
@@ -471,13 +476,17 @@ function Dashboard.Init()
   panel:SetScript("OnMouseDown", function(self) self:Raise() end)
   panel:SetScript("OnDragStart", function(self) if not ns.db.locked then self:StartMoving() end end)
   panel:SetScript("OnDragStop", function(self) self:StopMovingOrSizing(); Dashboard.SavePosition() end)
+  -- Closing the panel (Escape, X, or otherwise) clears the desired-visibility
+  -- flag so a later refresh won't re-show it.
+  panel:SetScript("OnHide", function() shouldShow = false end)
+  table.insert(UISpecialFrames, "DuoReadyPanel")  -- Escape closes the panel
 
   if panel.TitleContainer then
     panel.TitleContainer:EnableMouse(true); panel.TitleContainer:RegisterForDrag("LeftButton")
     panel.TitleContainer:SetScript("OnDragStart", function() if not ns.db.locked then panel:StartMoving() end end)
     panel.TitleContainer:SetScript("OnDragStop", function() panel:StopMovingOrSizing(); Dashboard.SavePosition() end)
   end
-  if panel.CloseButton then panel.CloseButton:SetScript("OnClick", function() shouldShow = false; panel:Hide() end) end
+  if panel.CloseButton then panel.CloseButton:SetScript("OnClick", function() panel:Hide() end) end
 
   local content = panel.Inset or panel
   panel.content = content
@@ -501,15 +510,18 @@ function Dashboard.Init()
     botSh:SetGradient("VERTICAL", CreateColor(0, 0, 0, 0.5), CreateColor(0, 0, 0, 0))
   end
 
-  -- title-bar verdict + collapse toggle
-  local vDot = panel:CreateTexture(nil, "OVERLAY"); vDot:SetSize(16, 16)
-  if panel.CloseButton then vDot:SetPoint("RIGHT", panel.CloseButton, "LEFT", 0, 0)
+  -- title-bar verdict + collapse toggle. The dot + label double as the sync
+  -- indicator (gray dot / "WAITING" until the partner's data lands), so keep them
+  -- prominent — a larger, clearly-coloured label rather than the old small text.
+  local vDot = panel:CreateTexture(nil, "OVERLAY"); vDot:SetSize(18, 18)
+  if panel.CloseButton then vDot:SetPoint("RIGHT", panel.CloseButton, "LEFT", -2, 0)
   else vDot:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -8, -6) end
   panel.vDot = vDot
-  local vLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); vLabel:SetPoint("RIGHT", vDot, "LEFT", -4, 0)
+  local vLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal"); vLabel:SetPoint("RIGHT", vDot, "LEFT", -5, 0)
+  local vff = GameFontNormal:GetFont(); if vff then vLabel:SetFont(vff, 14) end
   panel.vLabel = vLabel
   local cb = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate"); cb:SetSize(24, 20)
-  cb:SetPoint("RIGHT", vLabel, "LEFT", -6, 0); cb:SetText("–")
+  cb:SetPoint("RIGHT", vLabel, "LEFT", -8, 0); cb:SetText("–")
   cb:SetScript("OnClick", function() ns.db.expanded = not ns.db.expanded; Dashboard.ApplyMode() end)
   panel.collapseBtn = cb
 
@@ -759,9 +771,8 @@ end
 -- ---------------------------------------------------------------------------
 function Dashboard.Refresh()
   if not panel then return end
-  local snap, verdict, alpha = getContext()
+  local snap, verdict = getContext()
   updateHeader(snap, verdict)
-  panel:SetAlpha(alpha)
 
   local r, g, b = S.classColor(snap.cls)
 

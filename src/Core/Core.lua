@@ -28,6 +28,7 @@ ns.VERSION     = "1.0.0"
 ns.PROTO       = 1            -- wire protocol version (the <version> token)
 ns.CHANNEL     = "PARTY"
 ns.STALE_AFTER = 30           -- seconds without a SNAP before partner panel dims (§5)
+ns.OFFLINE_AFTER = 50         -- seconds of total silence before we treat the partner as logged off
 
 -- ---------------------------------------------------------------------------
 -- Saved-variable defaults
@@ -64,6 +65,28 @@ local DB_DEFAULTS = {
     bags       = true,
     quest      = true,
   },
+  -- Privacy: which data we broadcast to the partner. Every key defaults to true
+  -- (share), so existing users and any future field keep today's behaviour until
+  -- they opt out. Keys are consumed by Snapshot/Comm encoders via ns.Shares().
+  privacy = {
+    -- Readiness (SNAP)
+    durability = true, bags = true, flask = true, food = true,
+    wpn = true, rune = true, hp = true, quest = true,
+    -- Character card (CARD)
+    identity = true,  -- class / spec / level / item level
+    gear     = true,  -- enchants / empty sockets / durability detail
+    keystone = true,  -- Mythic+ keystone
+    vault    = true,  -- Great Vault progress
+    location = true,  -- zone / resting
+    coords   = true,  -- map coordinates
+    gold     = true,
+    supplies = true,  -- potions / healthstone / food count
+    -- Counters & bulk (STATS / INV / QLOG / ACHV)
+    stats        = true,
+    inventory    = true,
+    questlog     = true,
+    achievements = true,
+  },
 }
 
 -- Per-character config (DuoReadyCharDB) — frame position lives here (§8.4).
@@ -79,6 +102,15 @@ local CHARDB_DEFAULTS = {
     -- personal (each tracks own; shown side-by-side)
     quests = 0, deaths = 0, mobs = 0, achievements = 0, levels = 0,
   },
+}
+
+-- Canonical ordered list of privacy keys (mirrors DB_DEFAULTS.privacy). Used to
+-- encode/decode the privacy manifest we exchange with the partner so each side can
+-- explain *why* a field is blank rather than spinning forever.
+ns.PRIVACY_KEYS = {
+  "durability", "bags", "flask", "food", "wpn", "rune", "hp", "quest",
+  "identity", "gear", "keystone", "vault", "location", "coords", "gold", "supplies",
+  "stats", "inventory", "questlog", "achievements",
 }
 
 -- Recursively fill missing keys in `dst` from `src`.
@@ -141,6 +173,33 @@ end)
 -- ---------------------------------------------------------------------------
 function ns:InCombat()
   return InCombatLockdown() or (UnitAffectingCombat and UnitAffectingCombat("player"))
+end
+
+-- ---------------------------------------------------------------------------
+-- Privacy gate: do we share `key` with the partner? Defaults to true so a missing
+-- or newly-added field is never silently withheld. The Snapshot/Comm encoders ask
+-- this before emitting each field; the Privacy page (src/UI/Pages/Privacy.lua)
+-- flips the flags in ns.db.privacy.
+-- ---------------------------------------------------------------------------
+--- @param key string A privacy key (see DB_DEFAULTS.privacy).
+--- @return boolean shared
+function ns.Shares(key)
+  local p = ns.db and ns.db.privacy
+  if not p then return true end
+  local v = p[key]
+  if v == nil then return true end
+  return v and true or false
+end
+
+-- Does the *partner* share `key` with us? Reads the manifest they broadcast (PRIV);
+-- ns.state.partnerPrivacy is a set of the keys they've hidden. Defaults to true so a
+-- partner on an older build (who never sends PRIV) is assumed to share everything.
+--- @param key string A privacy key (see PRIVACY_KEYS).
+--- @return boolean shared
+function ns.PartnerShares(key)
+  local hidden = ns.state.partnerPrivacy
+  if not hidden then return true end
+  return not hidden[key]
 end
 
 -- ---------------------------------------------------------------------------
@@ -209,6 +268,9 @@ SlashCmdList["DUOREADY"] = function(msg)
 
   elseif cmd == "stats" then
     if ns.Dashboard then ns.Dashboard.OpenTab("statistics") end
+
+  elseif cmd == "privacy" then
+    if ns.Dashboard then ns.Dashboard.OpenTab("privacy") end
 
   elseif cmd == "invite" then
     if ns.Pairing then ns.Pairing.Invite(arg) end
@@ -280,6 +342,7 @@ SlashCmdList["DUOREADY"] = function(msg)
       ns:Print("  |cffffff00/dr invite <name>|r — " .. L["pair with a partner"] .. "   |cffffff00/dr accept|r / |cffffff00/dr decline|r")
       ns:Print("  |cffffff00/dr partners|r — " .. L["list saved partners"] .. "   |cffffff00/dr switch <name>|r — " .. L["make one active"])
       ns:Print("  |cffffff00/dr unpair|r · |cffffff00/dr sync|r · |cffffff00/dr lock|r · |cffffff00/dr demo|r · |cffffff00/dr show|r/|cffffff00hide|r · |cffffff00/dr reset|r")
+      ns:Print("  |cffffff00/dr privacy|r — " .. L["choose what to share with your partner"])
       ns:Print("  |cffffff00/dr test|r (loopback) · |cffffff00/dr selftest|r · |cffffff00/dr debug|r · |cffffff00/dr|r (" .. L["options"] .. ")")
     end
   end

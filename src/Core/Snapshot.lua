@@ -35,23 +35,26 @@ end
 --- @return string payload Pipe-delimited SNAP body (kept under the chunk threshold).
 function Snapshot.Encode()
   local s = ns.state.self
-  -- qname must not contain our delimiters; strip pipes/carets defensively, then
-  -- truncate so the total stays under the 240-char chunk threshold.
-  local qname = ns.Util.Truncate((s.qname or ""):gsub("[|^]", " "), 40)
-
-  local parts = {
-    "dur="   .. (s.dur or 100),
-    "bags="  .. (s.bags or 0),
-    "flask=" .. b(s.flask),
-    "food="  .. b(s.food),
-    "wpn="   .. b(s.wpn),
-    "rune="  .. b(s.rune),
-    "hp="    .. b(s.hp),
-    "qid="   .. (s.qid or 0),
-    "qstep=" .. (s.qcur or 0) .. "/" .. (s.qtotal or 0),
-    "qpct="  .. (s.qpct or 0),
-    "qname=" .. qname,
-  }
+  -- Each field is gated by a privacy flag (ns.Shares); an omitted field decodes to
+  -- its default on the partner's side, so dropping one never corrupts the rest.
+  local parts = {}
+  local function add(key, str) if ns.Shares(key) then parts[#parts + 1] = str end end
+  add("durability", "dur="   .. (s.dur or 100))
+  add("bags",       "bags="  .. (s.bags or 0))
+  add("flask",      "flask=" .. b(s.flask))
+  add("food",       "food="  .. b(s.food))
+  add("wpn",        "wpn="   .. b(s.wpn))
+  add("rune",       "rune="  .. b(s.rune))
+  add("hp",         "hp="    .. b(s.hp))
+  if ns.Shares("quest") then
+    -- qname must not contain our delimiters; strip pipes/carets defensively, then
+    -- truncate so the total stays under the 240-char chunk threshold.
+    local qname = ns.Util.Truncate((s.qname or ""):gsub("[|^]", " "), 40)
+    parts[#parts + 1] = "qid="   .. (s.qid or 0)
+    parts[#parts + 1] = "qstep=" .. (s.qcur or 0) .. "/" .. (s.qtotal or 0)
+    parts[#parts + 1] = "qpct="  .. (s.qpct or 0)
+    parts[#parts + 1] = "qname=" .. qname
+  end
   return table.concat(parts, "|")
 end
 
@@ -118,27 +121,21 @@ function Snapshot.EncodeCard()
     str = (str or ""):gsub("[|^]", " ")
     return n and ns.Util.Truncate(str, n) or str
   end
-  local parts = {
-    "cls="    .. (s.cls or ""),
-    "spec="   .. (s.spec or 0),
-    "lvl="    .. (s.lvl or 0),
-    "ilvl="   .. (s.ilvl or 0),
-    "key="    .. clean(s.key, 18),
-    "klvl="   .. (s.klvl or 0),
-    "vault="  .. (s.vr or 0) .. "/" .. (s.vm or 0) .. "/" .. (s.vw or 0),
-    "zone="   .. clean(s.zone, 24),
-    "rest="   .. (s.rest and 1 or 0),
-    "gold="   .. (s.gold or 0),
-    "ench="   .. (s.enchMask or 0),
-    "gem="    .. (s.gemMiss or 0),
-    "dslot="  .. (s.durSlot or 0),
-    "dlow="   .. (s.durLowN or 0),
-    "pots="   .. (s.pots or 0),
-    "hs="     .. (s.hs or 0),
-    "feast="  .. (s.foodCount or 0),
-    "cx="     .. (s.cx or 0),
-    "cy="     .. (s.cy or 0),
-  }
+  -- Privacy-gated like SNAP: each group is emitted only if shared. Grouped fields
+  -- (identity, gear, supplies) travel together so a single toggle hides them all.
+  local parts = {}
+  local function add(key, ...)
+    if not ns.Shares(key) then return end
+    for i = 1, select("#", ...) do parts[#parts + 1] = select(i, ...) end
+  end
+  add("identity", "cls=" .. (s.cls or ""), "spec=" .. (s.spec or 0), "lvl=" .. (s.lvl or 0), "ilvl=" .. (s.ilvl or 0))
+  add("keystone", "key=" .. clean(s.key, 18), "klvl=" .. (s.klvl or 0))
+  add("vault",    "vault=" .. (s.vr or 0) .. "/" .. (s.vm or 0) .. "/" .. (s.vw or 0))
+  add("location", "zone=" .. clean(s.zone, 24), "rest=" .. (s.rest and 1 or 0))
+  add("gold",     "gold=" .. (s.gold or 0))
+  add("gear",     "ench=" .. (s.enchMask or 0), "gem=" .. (s.gemMiss or 0), "dslot=" .. (s.durSlot or 0), "dlow=" .. (s.durLowN or 0))
+  add("supplies", "pots=" .. (s.pots or 0), "hs=" .. (s.hs or 0), "feast=" .. (s.foodCount or 0))
+  add("coords",   "cx=" .. (s.cx or 0), "cy=" .. (s.cy or 0))
   return table.concat(parts, "|")
 end
 
@@ -215,6 +212,31 @@ function Snapshot.DecodeStats(payload)
 end
 
 -- ---------------------------------------------------------------------------
+-- PRIV: the privacy manifest. We send the list of keys we are NOT sharing (absence
+-- = sharing), so the partner can render "hidden" states instead of "stuck loading".
+-- ---------------------------------------------------------------------------
+--- @return string payload "hidden=k1,k2,..." (empty list when sharing everything).
+function Snapshot.EncodePrivacy()
+  local hidden = {}
+  for _, key in ipairs(ns.PRIVACY_KEYS) do
+    if not ns.Shares(key) then hidden[#hidden + 1] = key end
+  end
+  return "hidden=" .. table.concat(hidden, ",")
+end
+
+--- @param payload string|nil The PRIV body.
+--- @return table hidden Set of hidden keys ({} when the partner shares everything).
+function Snapshot.DecodePrivacy(payload)
+  local set = {}
+  local kv = parseKV(payload)
+  local list = kv and kv.hidden
+  if list and list ~= "" then
+    for key in list:gmatch("[^,]+") do set[key] = true end
+  end
+  return set
+end
+
+-- ---------------------------------------------------------------------------
 -- Verdict (spec §8.2). Returns "ready" | "amber" | "red" plus a list of issues.
 -- A failed *blocking* check => red; a failed *advisory* check => amber.
 -- "questMismatch" is evaluated against our own super-tracked quest.
@@ -240,17 +262,20 @@ function Snapshot.ComputeVerdict(snap, db)
     end
   end
 
-  if (snap.dur or 100) < thresholds.durability then fail("durability") end
-  if not snap.flask then fail("flask") end
-  if not snap.food  then fail("food") end
-  if (snap.bags or 0) <= 0 then fail("bags") end
-  if not snap.wpn  then fail("wpn") end
-  if not snap.rune then fail("rune") end
+  -- A field the partner has chosen not to share isn't a failure — we simply have no
+  -- information, so skip its check rather than flagging a false "missing"/red.
+  local function shared(key) return ns.PartnerShares(key) end
+  if shared("durability") and (snap.dur or 100) < thresholds.durability then fail("durability") end
+  if shared("flask") and not snap.flask then fail("flask") end
+  if shared("food")  and not snap.food  then fail("food") end
+  if shared("bags")  and (snap.bags or 0) <= 0 then fail("bags") end
+  if shared("wpn")   and not snap.wpn  then fail("wpn") end
+  if shared("rune")  and not snap.rune then fail("rune") end
 
   -- Quest mismatch: compare partner's broadcast quest with our super-tracked one.
   local myQuest = (C_SuperTrack and C_SuperTrack.GetSuperTrackedQuestID
     and C_SuperTrack.GetSuperTrackedQuestID()) or 0
-  if myQuest ~= 0 and (snap.qid or 0) ~= 0 and myQuest ~= snap.qid then
+  if shared("quest") and myQuest ~= 0 and (snap.qid or 0) ~= 0 and myQuest ~= snap.qid then
     fail("questMismatch")
   end
 

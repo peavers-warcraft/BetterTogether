@@ -67,6 +67,20 @@ function Pairing.Roster()
   return (ns.chardb and ns.chardb.pair and ns.chardb.pair.roster) or {}
 end
 
+--- Resolve a name to the stored full Name-Realm if it's anywhere in the roster
+--- (matched by short name), else nil. Used for presence pings, which target any
+--- saved partner — not just the active one IsBonded gates.
+--- @param name string|nil A character name (short or full).
+--- @return string|nil full The stored "Name-Realm", or nil if not a saved partner.
+function Pairing.InRoster(name)
+  if not name then return nil end
+  local short = shortName(name)
+  for _, n in ipairs(Pairing.Roster()) do
+    if shortName(n) == short then return n end
+  end
+  return nil
+end
+
 --- Is `sender` our currently-active bonded partner (by short name)?
 --- @param sender string|nil A character name (short or full).
 --- @return boolean
@@ -84,6 +98,7 @@ local function bondTo(fullPartner)
   rosterAdd(fullPartner)
   p.active = fullPartner
   ns.state.partner = nil   -- drop any prior partner's runtime data
+  ns.state.partnerPrivacy = nil
   ns.state.partnerName = shortName(fullPartner)
   ns.state.linked = true
   pendingInviteTo, pendingInviteFrom = nil, nil
@@ -145,6 +160,7 @@ function Pairing.RemoveFromRoster(full)
     p.active = nil
     ns.state.linked = false
     ns.state.partner = nil
+    ns.state.partnerPrivacy = nil
     ns.state.partnerName = nil
   end
   ns:Print(L["removed "] .. "|cffff8800" .. shortName(full) .. "|r " .. L["from your partners."])
@@ -194,6 +210,7 @@ function Pairing.SetActive(full)
   -- only sent on a real RemoveFromRoster.
   p.active = resolved
   ns.state.partner = nil          -- drop the old partner's snapshot/achievements
+  ns.state.partnerPrivacy = nil
   ns.state.partnerName = shortName(resolved)
   ns.state.linked = true
   ns:Print(L["now sharing with "] .. "|cff44ff44" .. shortName(resolved) .. "|r")

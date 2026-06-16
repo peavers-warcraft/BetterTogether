@@ -119,6 +119,45 @@ ns:RegisterEvent("PLAYER_LEVEL_UP", function()
   if SharedStats.IsTogether() then bump("levels") end
 end)
 
+-- C_ChallengeMode.GetCompletionInfo returns nils/zeros for a short beat after
+-- CHALLENGE_MODE_COMPLETED, so a synchronous read records "+0 <unknown>, over time".
+-- Read with retries until the level resolves, and turn the map *ID* it returns into
+-- a name via GetMapUIInfo (same resolution SelfState.readMythic uses for keystones).
+local MPLUS_CAPTURE_RETRIES = 6
+local MPLUS_CAPTURE_DELAY = 0.5
+
+local function readChallengeRun()
+  if not (C_ChallengeMode and C_ChallengeMode.GetCompletionInfo) then return nil end
+  local ok, mapID, level, _, onTime = pcall(C_ChallengeMode.GetCompletionInfo)
+  if not ok or not level or level == 0 then return nil end
+  local name
+  if mapID and C_ChallengeMode.GetMapUIInfo then
+    name = (C_ChallengeMode.GetMapUIInfo(mapID))
+  end
+  return {
+    map = name or (mapID and ("Map " .. mapID)) or nil,
+    level = level,
+    onTime = onTime and true or false,
+    ts = (GetServerTime and GetServerTime()) or 0,
+  }
+end
+
+local function recordChallengeRun(attempt)
+  local s = stats(); if not s then return end
+  local run = readChallengeRun()
+  if not run then
+    if attempt < MPLUS_CAPTURE_RETRIES then
+      C_Timer.After(MPLUS_CAPTURE_DELAY, function() recordChallengeRun(attempt + 1) end)
+    end
+    return
+  end
+  s.mplusRuns = s.mplusRuns or {}
+  table.insert(s.mplusRuns, 1, run)
+  while #s.mplusRuns > MPLUS_HISTORY_MAX do table.remove(s.mplusRuns) end
+  if ns.Comm and ns.Comm.QueueStats then ns.Comm.QueueStats() end
+  if ns.Dashboard and ns.Dashboard.Refresh then ns.Dashboard.Refresh() end
+end
+
 ns:RegisterEvent("CHALLENGE_MODE_COMPLETED", function()
   if not SharedStats.IsTogether() then return end
   lastChallengeAt = GetTime()
@@ -126,17 +165,11 @@ ns:RegisterEvent("CHALLENGE_MODE_COMPLETED", function()
   markFirstTogether(s)
   s.mplus = (s.mplus or 0) + 1
   s.dungeons = (s.dungeons or 0) + 1
-  local map, level, _, onTime
-  if C_ChallengeMode and C_ChallengeMode.GetCompletionInfo then
-    local ok, a, b, c, d = pcall(C_ChallengeMode.GetCompletionInfo)
-    if ok then map, level, _, onTime = a, b, c, d end
-  end
-  s.mplusRuns = s.mplusRuns or {}
-  table.insert(s.mplusRuns, 1, { map = map, level = level, onTime = onTime,
-    ts = (GetServerTime and GetServerTime()) or 0 })
-  while #s.mplusRuns > MPLUS_HISTORY_MAX do table.remove(s.mplusRuns) end
+  -- Counters are correct now; push them immediately. The detailed run row lands once
+  -- GetCompletionInfo populates (see recordChallengeRun), with its own queue/refresh.
   if ns.Comm and ns.Comm.QueueStats then ns.Comm.QueueStats() end
   if ns.Dashboard and ns.Dashboard.Refresh then ns.Dashboard.Refresh() end
+  recordChallengeRun(1)
 end)
 
 ns:RegisterEvent("LFG_COMPLETION_REWARD", function()

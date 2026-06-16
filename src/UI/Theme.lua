@@ -70,13 +70,16 @@ end
 Theme.INDICATOR = {
   ready = "Interface\\COMMON\\Indicator-Green", amber = "Interface\\COMMON\\Indicator-Yellow",
   red   = "Interface\\COMMON\\Indicator-Red",   wait  = "Interface\\COMMON\\Indicator-Gray",
+  offline = "Interface\\COMMON\\Indicator-Gray",
 }
 Theme.VERDICT_RGB = {
   ready = { 0.30, 0.85, 0.40 }, amber = { 0.98, 0.78, 0.20 },
   red   = { 0.95, 0.32, 0.32 }, wait  = { 0.70, 0.70, 0.72 },
+  offline = { 0.55, 0.55, 0.58 },
 }
 Theme.VERDICT_LABEL = {
   ready = L["READY"], amber = L["CHECK"], red = L["NOT READY"], wait = L["WAITING"],
+  offline = L["OFFLINE"],
 }
 
 -- ---------------------------------------------------------------------------

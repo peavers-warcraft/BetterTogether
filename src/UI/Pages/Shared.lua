@@ -120,7 +120,16 @@ end
 function S.setRowValues(rows, snap)
   local L = ns.L
   local db = ns.db
-  local function set(key, ...) if db.show[key] and rows[key] then rows[key]:Set(...) end end
+  -- A row the partner has hidden gets a neutral "Hidden" value (no red/green mark)
+  -- so it reads as "no info shared" rather than a failed check.
+  local function set(key, label, value, ok)
+    if not (db.show[key] and rows[key]) then return end
+    if not ns.PartnerShares(key) then
+      rows[key]:Set(label, L["Hidden"], nil, Theme.SUBHEADER_COLOR)
+    else
+      rows[key]:Set(label, value, ok)
+    end
+  end
   local slot = snap.durSlot and ns.Snapshot.SLOT_NAMES[snap.durSlot]
   set("durability", L["Repairs"] .. (slot and (" |cff808080" .. slot .. "|r") or ""), (snap.dur or 0) .. "%", (snap.dur or 100) >= db.thresholds.durability)
   set("flask", L["Flask"], snap.flask and L["active"] or L["missing"], snap.flask)

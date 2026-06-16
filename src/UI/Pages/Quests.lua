@@ -48,6 +48,13 @@ local function questRow(id, title, status, you, partner)
 end
 
 local function getSections(snap)
+  -- Checked before any cached data: a partner who turns sharing off stops sending
+  -- QLOG but we may still hold their last list, so this must win over stale data.
+  if not ns.db.demoMode and not ns.PartnerShares("questlog") then
+    return { { title = L["Quests"],
+      text = "|cff808080" .. L["Your partner has turned off sharing their quest log."] .. "|r" } }
+  end
+
   local own, partner
   if ns.db.demoMode then
     own, partner = S.demoQLogOwn(), S.demoQLogPartner()

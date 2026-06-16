@@ -364,6 +364,13 @@ local function refresh(f, ctx)
       "|cffd0d0d0" .. L["Gathering your achievements…"] .. "|r\n|cff808080" .. L["This only takes a moment the first time you open it."] .. "|r", 18)
   end
 
+  -- Partner has turned off achievement sharing: their list will never arrive, so say
+  -- so plainly instead of holding the "gathering…" note forever.
+  if not ns.db.demoMode and not ns.PartnerShares("achievements") then
+    return fullPageNote(f, colW,
+      "|cff808080" .. L["Your partner has turned off sharing their achievements."] .. "|r", 18)
+  end
+
   viewEra = viewEra or defaultEra()
 
   -- Pull what we need: the era on screen, plus the oldest era the partner reports
