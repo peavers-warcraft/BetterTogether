@@ -43,7 +43,7 @@ local function scrollWidth(detail) return hostWidth(detail) - SCROLLBAR_W end
 -- the panel dominate the screen, so we derive a base scale that keeps it within a
 -- comfortable fraction of the available space. ns.db.scale then multiplies this:
 -- 1.0 = the recommended fit; raise or lower to taste.
-local FIT_W, FIT_H = 0.82, 0.62   -- most of the screen the panel should ever cover
+local FIT_W, FIT_H = 0.66, 0.46   -- target fraction of the screen the panel covers
 local function fitScale()
   local sw, sh = UIParent:GetWidth(), UIParent:GetHeight()
   if not (sw and sh) or sw <= 0 or sh <= 0 then return 1.0 end
@@ -54,6 +54,20 @@ end
 local function applyScale()
   if not panel then return end
   panel:SetScale(math.max(0.4, math.min(2.0, fitScale() * (ns.db.scale or 1.0))))
+end
+
+-- Diagnostic: dump the numbers that drive scaling so the default can be tuned to
+-- match a reference addon (e.g. Plumber). Invoked via `/dr scaleinfo`.
+function Dashboard.PrintScaleInfo()
+  local pw, ph = GetPhysicalScreenSize()
+  ns:Print(string.format("physical screen: %s x %s", tostring(pw), tostring(ph)))
+  ns:Print(string.format("UIParent: effScale=%.3f height=%.0f units", UIParent:GetEffectiveScale(), UIParent:GetHeight()))
+  ns:Print(string.format("fitScale=%.3f  db.scale=%.2f", fitScale(), ns.db.scale or 1.0))
+  if panel then
+    ns:Print(string.format("panel: scale=%.3f effScale=%.3f  -> ~%.0f%% of screen height",
+      panel:GetScale(), panel:GetEffectiveScale(), 100 * (PANEL_H_EXPANDED * panel:GetScale()) / UIParent:GetHeight()))
+  end
+  if _G.PlumberDB ~= nil or _G.Plumber ~= nil then ns:Print("(Plumber is loaded — compare its panel size by eye)") end
 end
 
 -- ---------------------------------------------------------------------------

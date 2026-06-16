@@ -266,6 +266,9 @@ SlashCmdList["DUOREADY"] = function(msg)
     ns.db.debug = not ns.db.debug
     ns:Print("debug " .. (ns.db.debug and "ON" or "OFF"))
 
+  elseif cmd == "scaleinfo" then
+    if ns.Dashboard and ns.Dashboard.PrintScaleInfo then ns.Dashboard.PrintScaleInfo() end
+
   elseif cmd == "help" or cmd == "" and false then
     -- (falls through to default below)
 
