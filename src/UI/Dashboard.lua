@@ -493,8 +493,8 @@ function Dashboard.Init()
   -- Scrollable content host (fixed window; content scrolls — Plumber-style)
   host = CreateFrame("ScrollFrame", "DuoReadyScroll", content, "UIPanelScrollFrameTemplate")
   -- Anchor top AND bottom to content so the scroll viewport's clip edge tracks the
-  -- real inset bounds; with only a fixed innerHeight() the last row spills past the
-  -- bottom border before scrolling (same fix as the detail pane). Width is set live.
+  -- real inset bounds; with only a fixed inner-height estimate the last row spills
+  -- past the bottom border before scrolling (same fix as the detail pane). Width is set live.
   host:SetPoint("TOPLEFT", content, "TOPLEFT", HOST_X, -PAD)
   host:SetPoint("BOTTOMLEFT", content, "BOTTOMLEFT", HOST_X, PAD)
   host:SetWidth(scrollWidth())
@@ -515,7 +515,7 @@ function Dashboard.Init()
 
   local detail = CreateFrame("Frame", nil, content)
   -- Anchor top AND bottom to content so the pane's height tracks the actual inset
-  -- bounds (not the innerHeight() estimate); otherwise the scroll frame's clip edge
+  -- bounds (not a fixed inner-height estimate); otherwise the scroll frame's clip edge
   -- lands just past the bottom border and long tooltips peek out beneath it.
   detail:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PAD, -PAD)
   detail:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", -PAD, PAD)
