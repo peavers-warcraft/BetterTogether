@@ -138,8 +138,8 @@ local function refresh(f, ctx)
   local rightW = math.min(560, W - COL_GUTTER - leftW)
   local rightX = leftW + COL_GUTTER
 
-  local own = (ns.db.demoMode and S.demoStats()) or (ns.chardb and ns.chardb.stats) or {}
-  local partner = (ns.db.demoMode and ctx.snap.stats) or (ns.state.partner and ns.state.partner.stats) or {}
+  local own = (ns.chardb and ns.chardb.stats) or {}
+  local partner = (ns.state.partner and ns.state.partner.stats) or {}
   local function shared(k) return math.max(own[k] or 0, partner[k] or 0) end
 
   -- tiles (full width)
@@ -162,7 +162,7 @@ local function refresh(f, ctx)
   Widgets.StyleHeader(f.cHeader, L["You vs Partner"], leftW)
   -- When the partner isn't sharing stats, their counters arrive as zero; label that
   -- side "hidden" instead of implying they've done nothing.
-  local statsHidden = not ns.db.demoMode and not ns.PartnerShares("stats")
+  local statsHidden = not ns.PartnerShares("stats")
   for i, def in ipairs(COMPARE_DEFS) do
     local r = f.cRows[i]
     r:SetIcon(def.icon)

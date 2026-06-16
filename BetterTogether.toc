@@ -1,24 +1,22 @@
-## Interface: 120000
+## Interface: 120001, 120005, 120007
+
 ## Title: BetterTogether
 ## Notes: Partner readiness dashboard for duo play.
-## Author: Chris (peavers-warcraft)
+## Author: Peavers
 ## Version: 1.0.0
+
 ## IconTexture: Interface\Icons\INV_Misc_GroupNeedMore
 ## Category-enUS: Peavers
 ## X-Localizations: enUS
 
-## X-Website: https://github.com/peavers-warcraft
+## X-Website: https://peavers.io
 ## X-Source-Code: https://github.com/peavers-warcraft/BetterTogether
+## X-Curse-Project-ID: 1577596
 
 ## SavedVariables: BetterTogetherDB
 ## SavedVariablesPerCharacter: BetterTogetherCharDB
 
 Changelog.lua
-
-# Load order matters: Core sets up the namespace + event dispatch first, then the
-# localization table and shared utilities (both consumed everywhere below), then
-# the data layer, then comms, then the UI (Theme + Widgets before Row/Dashboard
-# which consume them).
 
 src\Core\Core.lua
 src\Locales\enUS.lua

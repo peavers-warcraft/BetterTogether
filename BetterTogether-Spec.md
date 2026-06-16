@@ -181,7 +181,7 @@ A compact, movable, lockable frame showing the **partner's** readiness. Layout t
 ### 8.4 Design direction
 - Clean, modern, not 2010-era WoW. Subtle background, crisp status icons, restrained color (green/amber/red only for status, neutral otherwise).
 - Movable (drag), scalable (slider), lockable. Position saved per character.
-- A "demo mode" / test fixture that renders the panel with fake partner data so it looks good in screenshots/video for the **community vote** even when solo. (Important: the July 9–13 vote is won on visuals.)
+- A self-test mode (`/bt selftest`) that loops the addon's messaging back to your own character so the panel can be exercised solo with real data. (Important: the July 9–13 vote is won on visuals.)
 
 ---
 
@@ -211,7 +211,7 @@ A compact, movable, lockable frame showing the **partner's** readiness. Layout t
 **Milestone 2 — Dashboard UI (Days 6–10).**
 - Partner panel, rows, verdict light, movable/lockable/scalable, saved position.
 - Quest row + mismatch marker.
-- Demo-mode fixture for screenshots.
+- Self-test loopback (`/bt selftest`) for solo testing and screenshots.
 
 **Milestone 3 — Polish + settings (Days 11–15).**
 - Settings panel: thresholds, blocking vs advisory checks, pin-quest selector, toggles.

@@ -1,6 +1,6 @@
 --[[ UI/Settings.lua
   Options panel (spec §8.2/§8.4, §10 Milestone 3): thresholds, blocking vs
-  advisory checks, visible rows, pin-quest selector, scale/lock/demo toggles.
+  advisory checks, visible rows, pin-quest selector, scale/lock toggles.
   Registered into the Blizzard Settings UI (modern API with a legacy fallback).
 ]]
 
@@ -108,13 +108,7 @@ local function buildPanel()
     L["Prevents dragging the dashboard."],
     function() return ns.db.locked end,
     function(v) ns.db.locked = v; if ns.Dashboard then ns.Dashboard.ApplyLock() end end)
-  lockCB:SetPoint("TOPLEFT", leftX, cy); cy = cy - 30
-
-  local demoCB = makeCheck(panel, L["Demo mode (fake partner)"],
-    L["Renders the panel with sample data for screenshots/video."],
-    function() return ns.db.demoMode end,
-    function(v) ns.db.demoMode = v end)
-  demoCB:SetPoint("TOPLEFT", leftX, cy); cy = cy - 40
+  lockCB:SetPoint("TOPLEFT", leftX, cy); cy = cy - 40
 
   local scaleS = makeSlider(panel, L["Scale"], 0.5, 2.0, 0.05,
     function() return ns.db.scale or 1.0 end,

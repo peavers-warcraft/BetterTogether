@@ -52,48 +52,29 @@ local function todayYMD()
   return { y = t.year, m = t.month, d = t.monthDay }
 end
 
--- Resolve display fields. Demo entries carry their own; real entries (id + date only)
--- resolve through the achievement API on this client.
+-- Resolve display fields from an entry's id (id + date only) through the
+-- achievement API on this client.
 local function resolve(entry)
-  if entry.name then return entry.name, entry.points or 0, entry.desc or "", entry.icon end
   local _, name, points, _, _, _, _, desc, _, icon = GetAchievementInfo(entry.id)
   return name or (L["Achievement #"] .. entry.id), points or 0, desc or "", icon
 end
 
 -- ---------------------------------------------------------------------------
--- Data access (own is always available; partner is demo or lazily-synced)
+-- Data access (own is always available; partner is lazily-synced)
 -- ---------------------------------------------------------------------------
-local demoOwnCache, demoPartnerCache
-local function bucketByEra(list)
-  local by = {}
-  for _, a in ipairs(list) do
-    local k = ns.AchvSync.EraOf(a.y, a.m)
-    by[k] = by[k] or {}; by[k][#by[k] + 1] = a
-  end
-  return by
-end
-
 local function ownEra(eraKey)
-  if ns.db.demoMode then
-    demoOwnCache = demoOwnCache or bucketByEra(S.demoAchvOwn())
-    return demoOwnCache[eraKey] or {}
-  end
   return (ns.AchvSync and ns.AchvSync.EraList(eraKey)) or {}
 end
 
 -- Returns the partner's era list, or nil if we don't have it yet (vs. {} = synced-empty).
 local function partnerEra(eraKey)
-  if ns.db.demoMode then
-    demoPartnerCache = demoPartnerCache or bucketByEra(S.demoAchvPartner())
-    return demoPartnerCache[eraKey] or {}
-  end
   return ns.state.partner and ns.state.partner.achv and ns.state.partner.achv[eraKey] or nil
 end
 
-local function partnerLinked() return ns.db.demoMode or (ns.state.partner ~= nil) end
+local function partnerLinked() return ns.state.partner ~= nil end
 
 local function ensurePartnerEra(eraKey)
-  if ns.db.demoMode or not eraKey or not ns.state.partner then return end
+  if not eraKey or not ns.state.partner then return end
   ns.state.partner.achv = ns.state.partner.achv or {}
   if ns.state.partner.achv[eraKey] or requested[eraKey] then return end
   requested[eraKey] = true
@@ -356,9 +337,8 @@ local function refresh(f, ctx)
 
   -- Our own achievements are scanned across frames (the full DB is large), so the
   -- page opens instantly. Show a note while the first scan runs, then repaint — this
-  -- is what keeps clicking "Together" from freezing the client. Skipped in demo mode,
-  -- which serves canned data.
-  if not ns.db.demoMode and not ns.AchvSync.Ready() then
+  -- is what keeps clicking "Together" from freezing the client.
+  if not ns.AchvSync.Ready() then
     ns.AchvSync.Ensure(function() if ns.Dashboard then ns.Dashboard.Refresh() end end)
     return fullPageNote(f, colW,
       "|cffd0d0d0" .. L["Gathering your achievements…"] .. "|r\n|cff808080" .. L["This only takes a moment the first time you open it."] .. "|r", 18)
@@ -366,7 +346,7 @@ local function refresh(f, ctx)
 
   -- Partner has turned off achievement sharing: their list will never arrive, so say
   -- so plainly instead of holding the "gathering…" note forever.
-  if not ns.db.demoMode and not ns.PartnerShares("achievements") then
+  if not ns.PartnerShares("achievements") then
     return fullPageNote(f, colW,
       "|cff808080" .. L["Your partner has turned off sharing their achievements."] .. "|r", 18)
   end
@@ -392,7 +372,7 @@ local function refresh(f, ctx)
   -- rather than flashing a half-populated page as chunks stream in. Once any era has
   -- arrived (even an empty one), we fall through to the real layout; later era
   -- navigation uses the inline "Syncing…" note instead of blanking the page.
-  if not ns.db.demoMode and not next(ns.state.partner.achv or {}) then
+  if not next(ns.state.partner.achv or {}) then
     return fullPageNote(f, colW,
       "|cffd0d0d0" .. L["Gathering the achievements you've earned together…"] .. "|r\n|cff808080" .. L["This can take a few seconds the first time you open it."] .. "|r", 18)
   end
@@ -425,7 +405,7 @@ local function refresh(f, ctx)
   else
     f.note:Show(); f.note:ClearAllPoints(); f.note:SetPoint("TOPLEFT", f, "TOPLEFT", 3, -(yOff + 10))
     f.note:SetWidth(colW - 6)
-    local loading = not ns.db.demoMode and not (ns.state.partner and ns.state.partner.achv)
+    local loading = not (ns.state.partner and ns.state.partner.achv)
     f.note:SetText(loading
       and "|cff808080" .. L["Looking back through your shared history…"] .. "|r"
       or "|cff808080" .. L["No achievements earned on the same day yet — go make some memories together!"] .. "|r")
@@ -468,7 +448,7 @@ local function refresh(f, ctx)
     yOff = yOff + SEC_GAP - 3
   end
 
-  if not ns.db.demoMode and partnerEra(viewEra) == nil then
+  if partnerEra(viewEra) == nil then
     f.note2:Show(); f.note2:ClearAllPoints(); f.note2:SetPoint("TOPLEFT", f, "TOPLEFT", 3, -yOff)
     f.note2:SetWidth(colW - 6)
     f.note2:SetText("|cff808080" .. L["Syncing "] .. ns.AchvSync.EraName(viewEra) .. L[" achievements…"] .. "|r")
@@ -517,6 +497,6 @@ ns.Dashboard.RegisterPage({
     detail.unlock()
     viewEra = nil           -- reopen lands on the newest era you have
     requested = {}
-    if not ns.db.demoMode and ns.Comm and ns.Comm.RequestAchvDigest then ns.Comm.RequestAchvDigest() end
+    if ns.Comm and ns.Comm.RequestAchvDigest then ns.Comm.RequestAchvDigest() end
   end,
 })

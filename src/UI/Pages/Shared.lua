@@ -3,7 +3,7 @@
   (ns.UI.Shared). Look/feel constants live in ns.UI.Theme; reusable frames in
   ns.UI.Widgets — this file is the layer above them: formatters, readiness-row
   population, content builders, the generic info/row page templates, the detail-pane
-  pin controller, and the demo fixtures.
+  pin controller.
 ]]
 
 local addonName, ns = ...
@@ -67,7 +67,7 @@ end
 --- Which unit token is our partner (for the live 3D model)?
 --- @return string|nil unit "player"/"partyN" or nil.
 function S.partnerUnit()
-  if ns.db.demoMode or (ns.Comm and ns.Comm.selftest) then return "player" end
+  if ns.Comm and ns.Comm.selftest then return "player" end
   local name = ns.state.partnerName
   if not name then return nil end
   for i = 1, 4 do
@@ -400,93 +400,6 @@ function S.makePinController(opts)
   end
 
   return ctrl
-end
-
--- ---------------------------------------------------------------------------
--- Demo fixtures
--- ---------------------------------------------------------------------------
-function S.demoSnap()
-  return {
-    dur = 41, durSlot = 8, durLowN = 1, bags = 14,
-    flask = true, food = true, wpn = false, rune = true, hp = true,
-    qid = 1, qcur = 2, qtotal = 3, qpct = 66, qname = "The Dark Below",
-    cls = "PALADIN", spec = 65, lvl = 80, ilvl = 632,
-    key = "Ara-Kara", klvl = 12, vr = 1, vm = 2, vw = 0,
-    zone = "Dornogal", rest = true, gold = 142030, cx = 45.3, cy = 62.1,
-    enchMask = 1 + 32, gemMiss = 1, pots = 8, hs = 1, foodCount = 20,
-    lastSeen = GetTime(),
-    stats = { bosses = 214, dungeons = 96, mplus = 58, togetherTime = 612000, wipes = 38,
-      quests = 1843, deaths = 77, mobs = 41250, achievements = 132, levels = 80,
-      firstTogether = 1701000000 },
-  }
-end
-function S.demoInv()
-  return {
-    { link = "item:6948", count = 1 },    -- Hearthstone (Other)
-    { link = "item:5512", count = 12 },   -- Healthstone (Consumable)
-    { link = "item:159", count = 20 },    -- Refreshing Spring Water (Consumable)
-    { link = "item:4536", count = 5 },    -- Shiny Red Apple (Consumable)
-    { link = "item:2589", count = 80 },   -- Linen Cloth (Tradegoods)
-    { link = "item:2592", count = 60 },   -- Wool Cloth
-    { link = "item:4306", count = 40 },   -- Silk Cloth
-    { link = "item:14047", count = 25 },  -- Runecloth
-    { link = "item:2840", count = 10 },   -- Copper Bar
-    { link = "item:2770", count = 15 },   -- Copper Ore
-  }
-end
-
--- Quest-log comparison fixtures. ids 1 & 2 overlap (on together); id 4 is
--- partner-only; ids 3 & 5 are you-only.
-function S.demoQLogOwn()
-  return {
-    { id = 1, done = false, cur = 2, total = 3, title = "The Dark Below" },
-    { id = 2, done = true,  cur = 1, total = 1, title = "Whispers in the Deep" },
-    { id = 3, done = false, cur = 5, total = 8, title = "Spider's Kiss" },
-    { id = 5, done = false, cur = 0, total = 4, title = "Hold the Line" },
-  }
-end
-function S.demoQLogPartner()
-  return {
-    { id = 1, done = true,  cur = 3, total = 3, title = "The Dark Below" },
-    { id = 2, done = false, cur = 0, total = 1, title = "Whispers in the Deep" },
-    { id = 4, done = false, cur = 1, total = 6, title = "Threads of Fate" },
-  }
-end
-
-function S.demoStats()
-  return { bosses = 214, dungeons = 96, mplus = 58, togetherTime = 612000, wipes = 38,
-    quests = 1902, deaths = 64, mobs = 38110, achievements = 140, levels = 80,
-    firstTogether = 1701000000,
-    mplusRuns = {
-      { map = "Ara-Kara", level = 12, onTime = true, ts = 0 },
-      { map = "City of Threads", level = 11, onTime = false, ts = 0 },
-      { map = "The Stonevault", level = 13, onTime = true, ts = 0 },
-      { map = "Mists of Tirna Scithe", level = 15, onTime = true, ts = 0 },
-      { map = "The Dawnbreaker", level = 10, onTime = true, ts = 0 },
-    } }
-end
-
--- Achievements-together fixtures. Several id+date pairs are shared between own &
--- partner (earned the SAME day → "together"); the rest are one-sided. Demo entries
--- carry display fields (name/points/desc/icon) so the page renders without resolving
--- fabricated ids through GetAchievementInfo.
-function S.demoAchvOwn()
-  return {
-    { id = 33,    y = 2006, m = 11, d = 20, name = "Level 60",                    points = 10, icon = "Interface\\Icons\\Achievement_Level_60",                    desc = "Reach level 60." },
-    { id = 2186,  y = 2009, m = 6,  d = 15, name = "Glory of the Ulduar Raider",  points = 25, icon = "Interface\\Icons\\Achievement_Boss_Yoggsaron_01",          desc = "Complete the Glory of the Ulduar Raider meta-achievement." },
-    { id = 4602,  y = 2010, m = 12, d = 8,  name = "Fall of the Lich King",       points = 25, icon = "Interface\\Icons\\Achievement_Dungeon_Icecrown_Frostmourne", desc = "Defeat the Lich King in Icecrown Citadel." },
-    { id = 11611, y = 2019, m = 2,  d = 2,  name = "Ahead of the Curve: Jaina",   points = 10, icon = "Interface\\Icons\\Achievement_Boss_JainaProudmoore",        desc = "Defeat Lady Jaina Proudmoore on Heroic before the next tier." },
-    { id = 545,   y = 2012, m = 10, d = 5,  name = "Pandaria Explorer",           points = 10, icon = "Interface\\Icons\\Achievement_Zone_Pandaria",                desc = "Explore Pandaria, revealing the covered areas of the map." },
-  }
-end
-function S.demoAchvPartner()
-  return {
-    { id = 33,    y = 2006, m = 11, d = 20, name = "Level 60",                    points = 10, icon = "Interface\\Icons\\Achievement_Level_60",                    desc = "Reach level 60." },
-    { id = 2186,  y = 2009, m = 6,  d = 15, name = "Glory of the Ulduar Raider",  points = 25, icon = "Interface\\Icons\\Achievement_Boss_Yoggsaron_01",          desc = "Complete the Glory of the Ulduar Raider meta-achievement." },
-    { id = 4602,  y = 2010, m = 12, d = 8,  name = "Fall of the Lich King",       points = 25, icon = "Interface\\Icons\\Achievement_Dungeon_Icecrown_Frostmourne", desc = "Defeat the Lich King in Icecrown Citadel." },
-    { id = 11611, y = 2019, m = 2,  d = 2,  name = "Ahead of the Curve: Jaina",   points = 10, icon = "Interface\\Icons\\Achievement_Boss_JainaProudmoore",        desc = "Defeat Lady Jaina Proudmoore on Heroic before the next tier." },
-    { id = 965,   y = 2015, m = 7,  d = 1,  name = "The Loremaster",              points = 50, icon = "Interface\\Icons\\Achievement_Quests_Completed_08",         desc = "Complete the Loremaster meta-achievement." },
-  }
 end
 
 return S

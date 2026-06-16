@@ -112,9 +112,6 @@ It takes about thirty seconds.
 Pairing works over whisper, so you **don't even need to be in a party** to set it
 up. Drag the panel wherever you like, then `/bt lock` to pin it in place.
 
-> 💡 Want to see it in action solo? Type `/bt demo` to fill the panel with sample
-> data — perfect for trying it out or taking screenshots.
-
 ---
 
 ## Commands
@@ -137,7 +134,6 @@ Everything is reachable from the panel, but if you like the keyboard, use `/bt` 
 | `/bt stats` | Jump straight to your shared Statistics |
 | `/bt privacy` | Jump straight to Privacy controls |
 | `/bt sync` | Ask your partner for a fresh update |
-| `/bt demo` | Toggle demo mode (sample data) |
 
 ---
 

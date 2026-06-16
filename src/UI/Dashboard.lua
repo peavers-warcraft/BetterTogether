@@ -87,11 +87,6 @@ end
 -- it (the fade read as an ugly translucent window).
 -- ---------------------------------------------------------------------------
 local function getContext()
-  if ns.db.demoMode then
-    local snap = S.demoSnap()
-    ns.state.partnerName = "AMY"
-    return snap, ns.Snapshot.ComputeVerdict(snap, ns.db)
-  end
   local bonded = ns.Pairing and ns.Pairing.PartnerName()
   local partner = ns.state.partner
   if not ns.state.linked or not partner then
@@ -387,9 +382,9 @@ local function renderQuestDetail()
   parts[#parts + 1] = " "
 
   -- Your side: real per-objective text when we're actually on the quest; else the
-  -- synced aggregate (and never call the API in demo mode — ids are fabricated).
+  -- synced aggregate.
   parts[#parts + 1] = Theme.C.gold .. L["Your progress"] .. "|r"
-  local objs = (not ns.db.demoMode) and C_QuestLog and C_QuestLog.GetQuestObjectives
+  local objs = C_QuestLog and C_QuestLog.GetQuestObjectives
     and C_QuestLog.GetQuestObjectives(q.id) or nil
   if objs and #objs > 0 then
     for _, o in ipairs(objs) do

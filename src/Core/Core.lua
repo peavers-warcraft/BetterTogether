@@ -37,7 +37,6 @@ ns.OFFLINE_AFTER = 50         -- seconds of total silence before we treat the pa
 local DB_DEFAULTS = {
   scale       = 1.0,
   locked      = false,
-  demoMode    = false,
   debug       = false,
   expanded    = true,         -- full-page view (vs collapsed compact card)
   pinnedQuestID = nil,        -- nil => broadcast the super-tracked quest
@@ -256,11 +255,6 @@ SlashCmdList["BETTERTOGETHER"] = function(msg)
     if ns.Dashboard then ns.Dashboard.ApplyLock() end
     ns:Print("panel " .. (ns.db.locked and "locked" or "unlocked"))
 
-  elseif cmd == "demo" then
-    ns.db.demoMode = not ns.db.demoMode
-    if ns.Dashboard then ns.Dashboard.Refresh() end
-    ns:Print("demo mode " .. (ns.db.demoMode and "|cff44ff44ON|r" or "OFF"))
-
   elseif cmd == "collapse" or cmd == "expand" then
     ns.db.expanded = not ns.db.expanded
     if ns.Dashboard then ns.Dashboard.ApplyMode() end
@@ -341,7 +335,7 @@ SlashCmdList["BETTERTOGETHER"] = function(msg)
       ns:Print(L["commands:"])
       ns:Print("  |cffffff00/bt invite <name>|r — " .. L["pair with a partner"] .. "   |cffffff00/bt accept|r / |cffffff00/bt decline|r")
       ns:Print("  |cffffff00/bt partners|r — " .. L["list saved partners"] .. "   |cffffff00/bt switch <name>|r — " .. L["make one active"])
-      ns:Print("  |cffffff00/bt unpair|r · |cffffff00/bt sync|r · |cffffff00/bt lock|r · |cffffff00/bt demo|r · |cffffff00/bt show|r/|cffffff00hide|r · |cffffff00/bt reset|r")
+      ns:Print("  |cffffff00/bt unpair|r · |cffffff00/bt sync|r · |cffffff00/bt lock|r · |cffffff00/bt show|r/|cffffff00hide|r · |cffffff00/bt reset|r")
       ns:Print("  |cffffff00/bt privacy|r — " .. L["choose what to share with your partner"])
       ns:Print("  |cffffff00/bt test|r (loopback) · |cffffff00/bt selftest|r · |cffffff00/bt debug|r · |cffffff00/bt|r (" .. L["options"] .. ")")
     end
