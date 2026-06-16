@@ -1,74 +1,175 @@
-# BetterTogether — Partner Readiness Dashboard
+# BetterTogether
 
-A paired WoW addon for two players who run content together. Each person installs
-it; the two clients handshake over the addon comm channel and each renders a
-**readiness dashboard of the _other_ person** — repairs, flask, food, weapon
-enchant, aug rune, durability, bag space, and current quest + step — so you know
-at a glance, **before the pull**, that your partner is actually prepared and on
-the right quest.
+**The game is better with someone. This makes it even better.**
 
-Built for duo play (e.g. a Holy Paladin + BM Hunter couple): too small for raid
-tooling, too interdependent for solo tooling.
+> A living dashboard of the person you adventure with: see at a glance that your
+> partner is flasked, fed, repaired, and on the right quest *before* the pull — plus
+> a growing scrapbook of every boss, dungeon, and achievement you've earned
+> together. Built for duos, privacy-first, and beautiful on any screen.
 
-## How it works
+WoW is a world meant to be shared — but the moment you actually play side by side
+with someone, the little things start tripping you up. Did your partner remember
+to repair? Are they flasked? Are you even on the same quest? Are you about to pull
+while they're still selling greys in town?
 
-Each client reads only **its own** out-of-combat state and broadcasts a compact
-snapshot over the `PARTY` addon channel. No client ever reads protected state
-about the other player, so the addon is immune to Midnight's Secret Values
-restrictions. It does nothing in combat, by design.
+**BetterTogether** is a warm, living dashboard of the person you adventure with.
+Each of you installs it, you bond once, and from then on you each see a beautiful
+panel showing the *other* person — their readiness before every pull, what they're
+up to right now, and a growing scrapbook of everything you've done together.
 
-## Usage
+It's built for duos. Two friends. A guild pair. A couple sharing one couch and two
+keyboards. The shape of play almost no addon serves — too small for raid tools, too
+*together* for solo tools.
 
-1. Both partners install BetterTogether.
-2. One runs `/bt invite <partnerName>`; the other clicks **Accept** on the popup (or `/bt accept`).
-3. You're bonded — the pairing is saved and auto-reconnects every login. Drag the panel to position; `/bt lock` to lock it.
+---
 
-Pairing is over whisper, so you don't need to be in a party. The bond persists until `/bt unpair`.
+## Why you'll love it
 
-### Slash commands (`/bt` or `/bettertogether`)
+- 💛 **It's about the two of you.** Not a raid frame, not a meter. A panel that
+  knows you're a pair and treats your journey as one shared story.
+- 🛡️ **No more "wait, are you ready?"** One glance tells you your partner is
+  flasked, fed, repaired, and on the right quest — *before* the pull, not after the
+  wipe.
+- 📜 **It remembers what you've done together.** Bosses downed, dungeons run, miles
+  walked side by side, and the achievements you earned on the very same day — kept
+  as memories you can look back on.
+- 🔒 **You're always in control.** Every single thing you share is a toggle. Share
+  everything, share nothing, or anything in between. Your partner even *knows* when
+  you've chosen to keep something private — no awkward "why is this blank?"
+- ✨ **It just feels nice.** A clean, modern, gold-accented panel with a live 3D
+  model of your partner. Movable, scalable, and gorgeous on any screen.
 
-| Command | Effect |
+---
+
+## What's inside
+
+BetterTogether is organized into tabs, each one a different window into your duo.
+
+### 👤 Overview — *is my partner ready?*
+A live, rotatable **3D model** of your partner alongside the big question that
+matters before every pull: **are they ready?** A single green / amber / red verdict,
+backed by at-a-glance rows:
+
+- **Repairs & durability** — the weakest piece of gear, as a percentage
+- **Flask · Food buff · Weapon oil · Augment rune** — active or missing, with icons
+- **Bag space** — free slots remaining
+- **Right now** — where they are, whether they're resting, their Mythic+ keystone,
+  and their gold
+
+### 📊 Statistics — *everything we've done together*
+The heart of why this addon is wholesome. A running tally of your shared adventures:
+
+- **Adventured together** — bosses killed, dungeons run, Mythic+ completed, and
+  **time played together** (self-healing, so neither of you can miss a count)
+- **You vs. your partner** — quests completed, deaths, mobs slain, levels gained,
+  side by side
+- **Records** — the date you first grouped up ("together since…") and your best
+  Mythic+ key
+- **Recent Mythic+** — your last runs, timed or not
+
+### 💫 Together — *your shared memories*
+Your achievements, reframed as a scrapbook of the two of you:
+
+- **Featured memories** — *"3 years ago today,"* *where it all began,* and your
+  proudest shared moment, surfaced automatically
+- **Browse by era** — page back through every expansion and see the achievements you
+  earned on the **same day** (the ones you almost certainly earned together), plus
+  the ones only one of you has
+
+### 🧭 Quests — *are we going the same way?*
+No more running in opposite directions:
+
+- **On together** — quests you're both doing, with each side's progress
+- **Partner's on it, you're not** — and vice versa, so nobody gets left behind
+
+### 🎒 Inventory — *what's in their bags?*
+Browse your partner's bags neatly sorted into Consumables, Reagents, Quest Items,
+Equipment, and more. Hover any item for a full tooltip. Great for "do you have a
+spare flask?" moments.
+
+### 🤝 Partners — *your roster*
+BetterTogether isn't limited to one person. Keep a roster of everyone you adventure
+with, see who's online, and switch your active partner with a single click.
+
+### 🔐 Privacy — *your call, always*
+Every category is a checkbox, grouped into Readiness, Character, and History & data.
+**Share all**, **Share nothing**, or fine-tune it. Unticked items never leave your
+client — and your partner's panel politely shows "hidden" instead of an awkward
+blank.
+
+---
+
+## Getting started
+
+It takes about thirty seconds.
+
+1. **Both of you install BetterTogether.** (You both need it — it's a two-way bond.)
+2. One of you types `/bt invite <partnerName>`.
+3. The other clicks **Accept** on the popup (or types `/bt accept`).
+4. **That's it — you're bonded.** The pairing is saved and reconnects automatically
+   every time you log in.
+
+Pairing works over whisper, so you **don't even need to be in a party** to set it
+up. Drag the panel wherever you like, then `/bt lock` to pin it in place.
+
+> 💡 Want to see it in action solo? Type `/bt demo` to fill the panel with sample
+> data — perfect for trying it out or taking screenshots.
+
+---
+
+## Commands
+
+Everything is reachable from the panel, but if you like the keyboard, use `/bt` (or
+`/bettertogether`):
+
+| Command | What it does |
 |---|---|
-| `/bt invite <name>` | send a pair request to a character |
-| `/bt accept` / `/bt decline` | respond to an incoming pair request |
-| `/bt unpair` | clear the saved pairing |
-| `/bt` | open the options panel |
-| `/bt lock` | lock/unlock the panel position |
-| `/bt demo` | toggle demo mode (fake partner data for screenshots) |
-| `/bt show` / `/bt hide` | show/hide the panel |
-| `/bt reset` | reset panel position |
-| `/bt sync` | request a fresh snapshot from your partner |
-| `/bt test` | single-client loopback (render your own state as a fake partner) |
-| `/bt selftest` | whisper-to-self wire test |
-| `/bt debug` | toggle debug logging |
+| `/bt invite <name>` | Send a pairing request to a character |
+| `/bt accept` / `/bt decline` | Respond to an incoming request |
+| `/bt partners` (or `/bt list`) | List everyone you've bonded with |
+| `/bt switch <name>` | Make a different saved partner active |
+| `/bt unpair` | Remove the current partner |
+| `/bt` | Open the panel / settings |
+| `/bt show` / `/bt hide` | Show or hide the panel |
+| `/bt lock` | Lock or unlock the panel's position |
+| `/bt reset` | Recenter the panel |
+| `/bt collapse` / `/bt expand` | Switch between compact and full views |
+| `/bt stats` | Jump straight to your shared Statistics |
+| `/bt privacy` | Jump straight to Privacy controls |
+| `/bt sync` | Ask your partner for a fresh update |
+| `/bt demo` | Toggle demo mode (sample data) |
 
-## Options
+---
 
-Thresholds (durability), which checks are **blocking** (red) vs **advisory**
-(amber), which rows are visible, panel scale, and a pinned broadcast quest are all
-configurable in `/bt`.
+## Settings
 
-## ⚠️ Before release — verify in-client (spec §11)
+Open with `/bt`. You can tune:
 
-The code is complete; these need confirming on live Midnight 12.0:
+- **Panel scale & lock** — size it to your screen and pin it in place
+- **Durability threshold** — how low is "too low" before the verdict turns red
+- **Which checks are blocking** — decide what counts as a real problem (red) vs. a
+  gentle heads-up (amber): durability, flask, food, bags, weapon oil, aug rune, or a
+  quest mismatch
+- **Which rows are visible** — hide anything you don't care about
+- **Broadcast quest** — share your super-tracked quest automatically, or pin a
+  specific one
 
-1. **`PARTY` addon messages deliver in the open world** (non-instance). _[expected: yes]_
-2. **`AddOnMessageLockdown` only triggers in combat-restricted states.** _[expected: yes]_
-3. **Consumable spellIDs** in `Consumables.lua` are placeholders from prior tiers
-   and **must be updated** for the current Midnight tier. While a buff is active,
-   run `/dump C_UnitAuras.GetAuraDataByIndex("player", i)` to read the live
-   `spellId`, then add it to the relevant table.
-4. (Optional, not required) Whether `C_UnitAuras` reads on `party1` are clean out
-   of combat — would enable an optional direct-read mode.
+---
 
-## CurseForge page copy (draft)
+## Built to be a good citizen
 
-> **BetterTogether** shows you your partner's readiness — flask, food, repairs, weapon
-> oil, bags, and current quest step — at a glance, before every pull. Built for
-> two-player duos. No combat logic, no automation, no taint: each client reads
-> only its own state and shares a tiny snapshot. Clean, movable, scalable panel.
+BetterTogether is intentionally quiet and safe:
 
-> **Note:** the in-game icon is a built-in Blizzard texture. Per contest rules,
-> the CurseForge project avatar must be **human-made** (do not use an AI-generated
-> avatar). Replace `## IconTexture` in the `.toc` with `Interface\AddOns\BetterTogether\Media\icon`
-> if you ship a custom in-game icon.
+- **It does nothing in combat, by design.** Every check happens out of combat.
+- **Each client only ever reads its own state** and shares a tiny snapshot — no
+  client reads anything protected about the other player. That keeps it fully
+  compatible with Midnight's Secret Values rules and free of taint.
+- **It respects the addon-message budget**, batching updates so it never spams the
+  server or risks a disconnect.
+
+No automation, no meters, no clutter. Just the two of you, a little more prepared and
+a lot more connected.
+
+---
+
+*Made for everyone who plays better together. 💛*
