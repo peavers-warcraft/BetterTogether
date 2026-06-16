@@ -75,7 +75,7 @@ local function getSections(snap)
     icon = icon or 134400
     local cat = bucketFor(classID or 15)
     local name, _, quality = GetItemInfo(id)
-    if not name then name = "item:" .. tostring(id) end
+    if not name then name = L["item:"] .. tostring(id) end
     local nm = name
     if quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality] then
       nm = (ITEM_QUALITY_COLORS[quality].hex or "") .. name .. "|r"

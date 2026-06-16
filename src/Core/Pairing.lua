@@ -11,6 +11,7 @@
 ]]
 
 local addonName, ns = ...
+local L = ns.L
 
 local Pairing = {}
 ns.Pairing = Pairing
@@ -86,7 +87,7 @@ local function bondTo(fullPartner)
   ns.state.partnerName = shortName(fullPartner)
   ns.state.linked = true
   pendingInviteTo, pendingInviteFrom = nil, nil
-  ns:Print("paired with |cff44ff44" .. shortName(fullPartner) .. "|r (saved — auto-reconnects each login)")
+  ns:Print(L["paired with "] .. "|cff44ff44" .. shortName(fullPartner) .. "|r " .. L["(saved — auto-reconnects each login)"])
   if ns.Comm then
     ns.Comm.SendHello()
     ns.Comm.QueueSnapshot(true)
@@ -103,21 +104,21 @@ end
 function Pairing.Invite(name)
   local target = fullName(name)
   if not target then
-    ns:Print("usage: |cffffff00/dr invite CharacterName|r")
+    ns:Print(L["usage: "] .. "|cffffff00/dr invite CharacterName|r")
     return
   end
   if shortName(target) == UnitName("player") then
-    ns:Print("you can't pair with yourself (try |cffffff00/dr selftest|r for that).")
+    ns:Print(L["you can't pair with yourself (try "] .. "|cffffff00/dr selftest|r" .. L[" for that)."])
     return
   end
   pendingInviteTo = target
   ns.Comm.WhisperTo(target, "INVITE|" .. myFullName())
-  ns:Print("invite sent to |cffffff00" .. shortName(target) .. "|r — waiting for them to accept…")
+  ns:Print(L["invite sent to "] .. "|cffffff00" .. shortName(target) .. "|r " .. L["— waiting for them to accept…"])
 end
 
 function Pairing.Accept()
   if not pendingInviteFrom then
-    ns:Print("no pending invite to accept.")
+    ns:Print(L["no pending invite to accept."])
     return
   end
   local from = pendingInviteFrom
@@ -128,7 +129,7 @@ end
 function Pairing.Decline()
   if not pendingInviteFrom then return end
   ns.Comm.WhisperTo(pendingInviteFrom, "DECLINE|" .. myFullName())
-  ns:Print("declined invite from " .. shortName(pendingInviteFrom))
+  ns:Print(L["declined invite from "] .. shortName(pendingInviteFrom))
   pendingInviteFrom = nil
 end
 
@@ -146,7 +147,7 @@ function Pairing.RemoveFromRoster(full)
     ns.state.partner = nil
     ns.state.partnerName = nil
   end
-  ns:Print("removed |cffff8800" .. shortName(full) .. "|r from your partners.")
+  ns:Print(L["removed "] .. "|cffff8800" .. shortName(full) .. "|r " .. L["from your partners."])
   if ns.Dashboard then ns.Dashboard.Refresh() end
 end
 
@@ -183,7 +184,7 @@ function Pairing.SetActive(full)
     if shortName(n) == shortName(full) then resolved = n; break end
   end
   if not resolved then
-    ns:Print("|cffff8800" .. shortName(full) .. "|r isn't in your partners list.")
+    ns:Print("|cffff8800" .. shortName(full) .. "|r " .. L["isn't in your partners list."])
     return
   end
   if p.active and shortName(p.active) == shortName(resolved) then return end  -- already active
@@ -195,7 +196,7 @@ function Pairing.SetActive(full)
   ns.state.partner = nil          -- drop the old partner's snapshot/achievements
   ns.state.partnerName = shortName(resolved)
   ns.state.linked = true
-  ns:Print("now sharing with |cff44ff44" .. shortName(resolved) .. "|r")
+  ns:Print(L["now sharing with "] .. "|cff44ff44" .. shortName(resolved) .. "|r")
   if ns.Comm then
     ns.Comm.SendHello()           -- announce to the new active partner
     ns.Comm.QueueSnapshot(true)   -- push our current state to them
@@ -209,7 +210,7 @@ end
 -- Accept/Decline confirmation popup
 -- ---------------------------------------------------------------------------
 StaticPopupDialogs["DUOREADY_INVITE"] = {
-  text = "|cff66ccffDuoReady|r\n%s wants to pair readiness dashboards with you.",
+  text = "|cff66ccffDuoReady|r\n" .. L["%s wants to pair readiness dashboards with you."],
   button1 = ACCEPT or "Accept",
   button2 = DECLINE or "Decline",
   OnAccept = function() Pairing.Accept() end,
@@ -227,7 +228,7 @@ function Pairing.OnMessage(mtype, rest, sender)
   if mtype == "INVITE" then
     local from = rest:match("^(.+)$") or sender
     pendingInviteFrom = from
-    ns:Print("|cffffff00" .. shortName(from) .. "|r wants to pair. Accept with |cffffff00/dr accept|r or use the popup.")
+    ns:Print("|cffffff00" .. shortName(from) .. "|r " .. L["wants to pair. Accept with "] .. "|cffffff00/dr accept|r" .. L[" or use the popup."])
     StaticPopup_Show("DUOREADY_INVITE", shortName(from))
 
   elseif mtype == "ACCEPT" then
@@ -239,7 +240,7 @@ function Pairing.OnMessage(mtype, rest, sender)
   elseif mtype == "DECLINE" then
     local from = rest:match("^(.+)$") or sender
     if pendingInviteTo and shortName(pendingInviteTo) == shortName(from) then
-      ns:Print("|cffff8800" .. shortName(from) .. "|r declined your pair invite.")
+      ns:Print("|cffff8800" .. shortName(from) .. "|r " .. L["declined your pair invite."])
       pendingInviteTo = nil
     end
   end

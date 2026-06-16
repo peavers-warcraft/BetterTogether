@@ -57,7 +57,7 @@ end
 local function resolve(entry)
   if entry.name then return entry.name, entry.points or 0, entry.desc or "", entry.icon end
   local _, name, points, _, _, _, _, desc, _, icon = GetAchievementInfo(entry.id)
-  return name or ("Achievement #" .. entry.id), points or 0, desc or "", icon
+  return name or (L["Achievement #"] .. entry.id), points or 0, desc or "", icon
 end
 
 -- ---------------------------------------------------------------------------

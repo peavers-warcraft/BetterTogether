@@ -16,7 +16,7 @@ local function resolveTitle(id, fallback)
   if (not t or t == "") and C_QuestLog and C_QuestLog.GetTitleForQuestID then
     t = C_QuestLog.GetTitleForQuestID(id)
   end
-  return (t and t ~= "") and t or ("Quest #" .. id)
+  return (t and t ~= "") and t or (L["Quest #"] .. id)
 end
 
 local function progStr(q)

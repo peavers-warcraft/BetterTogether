@@ -51,7 +51,7 @@ local function computeRecords(own, partner, shared)
   if ft > 0 then
     local days = math.max(0, math.floor(((GetServerTime and GetServerTime() or 0) - ft) / 86400))
     local when = date and date("%b %d, %Y", ft) or tostring(ft)
-    sinceVal = "|cffffffff" .. when .. "|r  |cff44ff44(" .. days .. "d)|r"
+    sinceVal = "|cffffffff" .. when .. "|r  |cff44ff44(" .. days .. L["d"] .. ")|r"
   end
 
   return {

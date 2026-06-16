@@ -169,8 +169,8 @@ local function refreshHero(card, active, short)
     local line1 = ((sp ~= "" and sp .. " ") or "") .. (cn or "")
     if line1 ~= "" then bits[#bits + 1] = line1 end
     local l2 = {}
-    if (p.lvl or 0) > 0 then l2[#l2 + 1] = "Lv " .. p.lvl end
-    if (p.ilvl or 0) > 0 then l2[#l2 + 1] = "|cffffd100" .. p.ilvl .. "|r ilvl" end
+    if (p.lvl or 0) > 0 then l2[#l2 + 1] = L["Lv "] .. p.lvl end
+    if (p.ilvl or 0) > 0 then l2[#l2 + 1] = "|cffffd100" .. p.ilvl .. "|r" .. L[" ilvl"] end
     if #l2 > 0 then bits[#bits + 1] = table.concat(l2, "  ·  ") end
     card.meta:SetText(table.concat(bits, "\n"))
   else

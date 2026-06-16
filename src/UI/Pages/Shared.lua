@@ -14,6 +14,7 @@ ns.UI.Shared = S
 
 local Theme = ns.UI.Theme
 local Widgets = ns.UI.Widgets
+local L = ns.L
 
 -- ---------------------------------------------------------------------------
 -- Formatters
@@ -138,14 +139,14 @@ function S.cActivity(snap)
     table.insert(t, Theme.InlineIcon(Theme.I_KEY) .. "|cffa335ee" .. snap.key .. " +" .. snap.klvl .. "|r")
   end
   if ((snap.vm or 0) + (snap.vr or 0) + (snap.vw or 0)) > 0 then
-    table.insert(t, Theme.InlineIcon(Theme.I_VAULT) .. "Vault  |cffffffffM+ " .. (snap.vm or 0) .. "/3   Raid " .. (snap.vr or 0) .. "/3|r")
+    table.insert(t, Theme.InlineIcon(Theme.I_VAULT) .. L["Vault  "] .. "|cffffffff" .. L["M+ "] .. (snap.vm or 0) .. L["/3   Raid "] .. (snap.vr or 0) .. L["/3"] .. "|r")
   end
   return table.concat(t, "\n")
 end
 function S.cStatus(snap)
   local t = {}
   if (snap.zone or "") ~= "" then
-    table.insert(t, Theme.InlineIcon(Theme.I_LOC) .. snap.zone .. (snap.rest and "  |cff6cb6ff(resting)|r" or ""))
+    table.insert(t, Theme.InlineIcon(Theme.I_LOC) .. snap.zone .. (snap.rest and ("  |cff6cb6ff" .. L["(resting)"] .. "|r") or ""))
   end
   if (snap.gold or 0) > 0 then table.insert(t, Theme.InlineIcon(Theme.I_GOLD) .. S.fmtGold(snap.gold)) end
   return table.concat(t, "\n")
@@ -157,13 +158,13 @@ function S.cGear(snap)
     for i, slot in ipairs(ns.Snapshot.ENCHANT_SLOTS) do
       if bit.band(snap.enchMask, 2 ^ (i - 1)) ~= 0 then table.insert(names, ns.Snapshot.SLOT_NAMES[slot] or ("slot" .. slot)) end
     end
-    table.insert(t, Theme.InlineIcon(Theme.I_GEAR) .. "|cffff8000No enchant:|r " .. table.concat(names, ", "))
+    table.insert(t, Theme.InlineIcon(Theme.I_GEAR) .. "|cffff8000" .. L["No enchant:"] .. "|r " .. table.concat(names, ", "))
   end
-  if (snap.gemMiss or 0) > 0 then table.insert(t, Theme.InlineIcon(Theme.I_GEAR) .. "|cffff8000Empty sockets:|r " .. snap.gemMiss) end
+  if (snap.gemMiss or 0) > 0 then table.insert(t, Theme.InlineIcon(Theme.I_GEAR) .. "|cffff8000" .. L["Empty sockets:"] .. "|r " .. snap.gemMiss) end
   local sup = {}
-  if (snap.pots or 0) > 0 then table.insert(sup, "Pots x" .. snap.pots) end
-  table.insert(sup, "Stone " .. ((snap.hs or 0) > 0 and "|cff44ff44yes|r" or "|cffff5555no|r"))
-  if (snap.foodCount or 0) > 0 then table.insert(sup, "Food x" .. snap.foodCount) end
+  if (snap.pots or 0) > 0 then table.insert(sup, L["Pots x"] .. snap.pots) end
+  table.insert(sup, L["Stone "] .. ((snap.hs or 0) > 0 and ("|cff44ff44" .. L["yes"] .. "|r") or ("|cffff5555" .. L["no"] .. "|r")))
+  if (snap.foodCount or 0) > 0 then table.insert(sup, L["Food x"] .. snap.foodCount) end
   table.insert(t, Theme.InlineIcon(Theme.I_SUP) .. table.concat(sup, "   "))
   return table.concat(t, "\n")
 end
@@ -173,7 +174,7 @@ function S.cQuest(snap)
   local mismatch = (myQ ~= 0 and snap.qid ~= 0 and myQ ~= snap.qid)
   local q = Theme.InlineIcon(Theme.I_QUEST) .. snap.qname
   if (snap.qtotal or 0) > 0 then q = q .. " |cff909090(" .. (snap.qcur or 0) .. "/" .. snap.qtotal .. ")|r" end
-  if mismatch then q = q .. "  |cffffcc33(off-quest)|r" end
+  if mismatch then q = q .. "  |cffffcc33" .. L["(off-quest)"] .. "|r" end
   return q
 end
 
@@ -196,10 +197,10 @@ end
 -- Supplies detail (Inventory tab): consumables, bag space, wallet
 function S.cSupplies(snap)
   local t = {}
-  table.insert(t, Theme.InlineIcon(Theme.I_SUP) .. "Combat potions: |cffffffff" .. (snap.pots or 0) .. "|r")
-  table.insert(t, Theme.InlineIcon(Theme.I_SUP) .. "Healthstone: " .. ((snap.hs or 0) > 0 and "|cff44ff44yes|r" or "|cffff5555no|r"))
-  table.insert(t, Theme.InlineIcon(Theme.ICON.food) .. "Food: |cffffffff" .. (snap.foodCount or 0) .. "|r")
-  table.insert(t, Theme.InlineIcon(Theme.ICON.bags) .. "Bag space: |cffffffff" .. (snap.bags or 0) .. " free|r")
+  table.insert(t, Theme.InlineIcon(Theme.I_SUP) .. L["Combat potions: "] .. "|cffffffff" .. (snap.pots or 0) .. "|r")
+  table.insert(t, Theme.InlineIcon(Theme.I_SUP) .. L["Healthstone: "] .. ((snap.hs or 0) > 0 and ("|cff44ff44" .. L["yes"] .. "|r") or ("|cffff5555" .. L["no"] .. "|r")))
+  table.insert(t, Theme.InlineIcon(Theme.ICON.food) .. L["Food: "] .. "|cffffffff" .. (snap.foodCount or 0) .. "|r")
+  table.insert(t, Theme.InlineIcon(Theme.ICON.bags) .. L["Bag space: "] .. "|cffffffff" .. (snap.bags or 0) .. L[" free"] .. "|r")
   if (snap.gold or 0) > 0 then table.insert(t, Theme.InlineIcon(Theme.I_GOLD) .. S.fmtGold(snap.gold)) end
   return table.concat(t, "\n")
 end

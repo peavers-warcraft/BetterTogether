@@ -96,8 +96,8 @@ local function refresh(f, ctx)
   local info = {}
   if sp ~= "" or cn ~= "" then table.insert(info, S.hex(r, g, b) .. (sp ~= "" and (sp .. " ") or "") .. cn .. "|r") end
   local l2 = {}
-  if (snap.lvl or 0) > 0 then table.insert(l2, "Lv " .. snap.lvl) end
-  if (snap.ilvl or 0) > 0 then table.insert(l2, "|cffffd100" .. snap.ilvl .. "|r ilvl") end
+  if (snap.lvl or 0) > 0 then table.insert(l2, L["Lv "] .. snap.lvl) end
+  if (snap.ilvl or 0) > 0 then table.insert(l2, "|cffffd100" .. snap.ilvl .. "|r" .. L[" ilvl"]) end
   if #l2 > 0 then table.insert(info, table.concat(l2, "  ·  ")) end
   f.exInfo:ClearAllPoints(); f.exInfo:SetPoint("TOP", f.modelBox, "BOTTOM", 0, -12); f.exInfo:SetText(table.concat(info, "\n"))
 
@@ -127,7 +127,7 @@ local function refresh(f, ctx)
   -- Now (current activity + location) — rendered as chip info-rows like Readiness
   local items = {}
   if (snap.zone or "") ~= "" then
-    items[#items + 1] = { icon = Theme.I_LOC, label = L["Location"], value = snap.zone .. (snap.rest and "  |cff6cb6ff(resting)|r" or "") }
+    items[#items + 1] = { icon = Theme.I_LOC, label = L["Location"], value = snap.zone .. (snap.rest and ("  |cff6cb6ff" .. L["(resting)"] .. "|r") or "") }
   end
   if (snap.cx or 0) > 0 or (snap.cy or 0) > 0 then
     items[#items + 1] = { icon = Theme.I_COORDS, label = L["Coordinates"], value = string.format("%.1f, %.1f", snap.cx or 0, snap.cy or 0) }
