@@ -1,9 +1,9 @@
 --[[ Core.lua
-  DuoReady — Partner Readiness Dashboard
+  BetterTogether — Partner Readiness Dashboard
   Addon namespace, event dispatch, saved variables, init, slash commands.
 
-  Architecture (see DuoReady-Spec.md §3, §5):
-    - `DuoReady` is a global runtime-state table (matches spec naming).
+  Architecture (see BetterTogether-Spec.md §3, §5):
+    - `BetterTogether` is a global runtime-state table (matches spec naming).
     - `ns` is the private addon namespace shared across files; modules hang off it.
     - A single hidden event frame fans events out to per-event handler lists that
       modules register via ns:RegisterEvent(event, handler).
@@ -12,18 +12,18 @@
 local addonName, ns = ...
 
 -- Global runtime state (spec §5). Kept global so /dump and the spec's naming work.
-DuoReady = {
+BetterTogether = {
   self        = {},     -- own live readiness, recomputed on relevant events
   partner     = nil,    -- last decoded SNAP from partner (+ lastSeen)
   linked      = false,  -- true once HELLO handshake completed
   partnerName = nil,
 }
-ns.state = DuoReady
+ns.state = BetterTogether
 
 -- ---------------------------------------------------------------------------
 -- Constants
 -- ---------------------------------------------------------------------------
-ns.PREFIX      = "DuoReady"
+ns.PREFIX      = "BetterTogether"
 ns.VERSION     = "1.0.0"
 ns.PROTO       = 1            -- wire protocol version (the <version> token)
 ns.CHANNEL     = "PARTY"
@@ -33,7 +33,7 @@ ns.OFFLINE_AFTER = 50         -- seconds of total silence before we treat the pa
 -- ---------------------------------------------------------------------------
 -- Saved-variable defaults
 -- ---------------------------------------------------------------------------
--- Account-wide config (DuoReadyDB).
+-- Account-wide config (BetterTogetherDB).
 local DB_DEFAULTS = {
   scale       = 1.0,
   locked      = false,
@@ -89,7 +89,7 @@ local DB_DEFAULTS = {
   },
 }
 
--- Per-character config (DuoReadyCharDB) — frame position lives here (§8.4).
+-- Per-character config (BetterTogetherCharDB) — frame position lives here (§8.4).
 local CHARDB_DEFAULTS = {
   point = { "CENTER", nil, "CENTER", 0, 120 },
   lastTab = "overview",         -- remembered tab in the shell
@@ -129,14 +129,14 @@ end
 -- ---------------------------------------------------------------------------
 -- Lightweight logging
 -- ---------------------------------------------------------------------------
-local PREFIX_TAG = "|cff66ccffDuoReady|r: "
+local PREFIX_TAG = "|cff66ccffBetterTogether|r: "
 function ns:Print(...)
   print(PREFIX_TAG .. table.concat({ ... }, " "))
 end
 
 function ns:Debug(...)
   if ns.db and ns.db.debug then
-    print("|cff999999[DuoReady dbg]|r", ...)
+    print("|cff999999[BetterTogether dbg]|r", ...)
   end
 end
 
@@ -144,7 +144,7 @@ end
 -- Event dispatch
 -- ---------------------------------------------------------------------------
 local handlers = {}          -- event -> { handler, ... }
-local frame = CreateFrame("Frame", "DuoReadyEventFrame")
+local frame = CreateFrame("Frame", "BetterTogetherEventFrame")
 ns.frame = frame
 
 -- Register a handler for a game event. Handlers receive (event, ...).
@@ -208,10 +208,10 @@ end
 local function onAddonLoaded(_, loaded)
   if loaded ~= addonName then return end
 
-  DuoReadyDB     = applyDefaults(DuoReadyDB or {}, DB_DEFAULTS)
-  DuoReadyCharDB = applyDefaults(DuoReadyCharDB or {}, CHARDB_DEFAULTS)
-  ns.db     = DuoReadyDB
-  ns.chardb = DuoReadyCharDB
+  BetterTogetherDB     = applyDefaults(BetterTogetherDB or {}, DB_DEFAULTS)
+  BetterTogetherCharDB = applyDefaults(BetterTogetherCharDB or {}, CHARDB_DEFAULTS)
+  ns.db     = BetterTogetherDB
+  ns.chardb = BetterTogetherCharDB
 
   -- Register the addon-message prefix as early as possible (spec §4.1).
   if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
@@ -232,7 +232,7 @@ local function onPlayerLogin()
   if ns.SelfState and ns.SelfState.Update then ns.SelfState.Update() end
   if ns.Pairing and ns.Pairing.Resume then ns.Pairing.Resume() end
 
-  ns:Print(ns.L["loaded v"] .. ns.VERSION .. ns.L[". Type |cffffff00/dr|r for options."])
+  ns:Print(ns.L["loaded v"] .. ns.VERSION .. ns.L[". Type |cffffff00/bt|r for options."])
 end
 
 ns:RegisterEvent("ADDON_LOADED", onAddonLoaded)
@@ -241,9 +241,9 @@ ns:RegisterEvent("PLAYER_LOGIN", onPlayerLogin)
 -- ---------------------------------------------------------------------------
 -- Slash commands
 -- ---------------------------------------------------------------------------
-SLASH_DUOREADY1 = "/duoready"
-SLASH_DUOREADY2 = "/dr"
-SlashCmdList["DUOREADY"] = function(msg)
+SLASH_BETTERTOGETHER1 = "/bettertogether"
+SLASH_BETTERTOGETHER2 = "/bt"
+SlashCmdList["BETTERTOGETHER"] = function(msg)
   local L = ns.L
   msg = (msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
   -- Split into command + argument; only the command is case-folded so character
@@ -288,7 +288,7 @@ SlashCmdList["DUOREADY"] = function(msg)
     if ns.Pairing then
       local roster, active = ns.Pairing.Roster(), ns.Pairing.PartnerName()
       if #roster == 0 then
-        ns:Print("no saved partners — |cffffff00/dr invite <name>|r to add one.")
+        ns:Print("no saved partners — |cffffff00/bt invite <name>|r to add one.")
       else
         ns:Print("partners:")
         for _, full in ipairs(roster) do
@@ -339,11 +339,11 @@ SlashCmdList["DUOREADY"] = function(msg)
       ns.Settings.Open()
     else
       ns:Print(L["commands:"])
-      ns:Print("  |cffffff00/dr invite <name>|r — " .. L["pair with a partner"] .. "   |cffffff00/dr accept|r / |cffffff00/dr decline|r")
-      ns:Print("  |cffffff00/dr partners|r — " .. L["list saved partners"] .. "   |cffffff00/dr switch <name>|r — " .. L["make one active"])
-      ns:Print("  |cffffff00/dr unpair|r · |cffffff00/dr sync|r · |cffffff00/dr lock|r · |cffffff00/dr demo|r · |cffffff00/dr show|r/|cffffff00hide|r · |cffffff00/dr reset|r")
-      ns:Print("  |cffffff00/dr privacy|r — " .. L["choose what to share with your partner"])
-      ns:Print("  |cffffff00/dr test|r (loopback) · |cffffff00/dr selftest|r · |cffffff00/dr debug|r · |cffffff00/dr|r (" .. L["options"] .. ")")
+      ns:Print("  |cffffff00/bt invite <name>|r — " .. L["pair with a partner"] .. "   |cffffff00/bt accept|r / |cffffff00/bt decline|r")
+      ns:Print("  |cffffff00/bt partners|r — " .. L["list saved partners"] .. "   |cffffff00/bt switch <name>|r — " .. L["make one active"])
+      ns:Print("  |cffffff00/bt unpair|r · |cffffff00/bt sync|r · |cffffff00/bt lock|r · |cffffff00/bt demo|r · |cffffff00/bt show|r/|cffffff00hide|r · |cffffff00/bt reset|r")
+      ns:Print("  |cffffff00/bt privacy|r — " .. L["choose what to share with your partner"])
+      ns:Print("  |cffffff00/bt test|r (loopback) · |cffffff00/bt selftest|r · |cffffff00/bt debug|r · |cffffff00/bt|r (" .. L["options"] .. ")")
     end
   end
 end

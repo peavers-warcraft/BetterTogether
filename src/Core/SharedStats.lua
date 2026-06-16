@@ -1,9 +1,9 @@
 --[[ SharedStats.lua
   Persistent shared duo statistics — the "what we've done together" counters that
-  make DuoReady a home base for a pair (bosses, dungeons, M+, quests, deaths,
+  make BetterTogether a home base for a pair (bosses, dungeons, M+, quests, deaths,
   mobs, time played together).
 
-  Storage: DuoReadyCharDB.stats (see Core.lua CHARDB_DEFAULTS).
+  Storage: BetterTogetherCharDB.stats (see Core.lua CHARDB_DEFAULTS).
     - shared counters (bosses/dungeons/mplus/togetherTime): both clients observe
       the same event, so they max-merge on sync and self-heal if one missed it.
     - personal counters (quests/deaths/mobs): each tracks its own; shown side by

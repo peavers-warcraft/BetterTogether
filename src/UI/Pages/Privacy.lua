@@ -1,5 +1,5 @@
 --[[ UI/Pages/Privacy.lua
-  Privacy page: per-field toggles for everything DuoReady broadcasts to the
+  Privacy page: per-field toggles for everything BetterTogether broadcasts to the
   partner. Each checkbox flips a flag in ns.db.privacy; the Snapshot/Comm encoders
   consult ns.Shares(key) before emitting a field, so an unticked item simply never
   leaves this client. Flags default to true (share), preserving prior behaviour.
@@ -98,7 +98,7 @@ local function build(host)
   f:SetSize(10, 10)
 
   f.intro = Widgets.SubText(f)
-  f.intro:SetText(L["Choose what DuoReady shares with your partner. Unticked items stay on this client and are never broadcast."])
+  f.intro:SetText(L["Choose what BetterTogether shares with your partner. Unticked items stay on this client and are never broadcast."])
 
   f.allBtn = Widgets.Button(f, L["Share all"], 110, 24)
   f.allBtn:SetScript("OnClick", function() setAll(true) end)

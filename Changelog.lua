@@ -1,6 +1,6 @@
 -- Auto-generated during release. Do not edit.
 PeaversChangelogs = PeaversChangelogs or {}
-PeaversChangelogs["DuoReady"] = {
+PeaversChangelogs["BetterTogether"] = {
     version = "0.0.0",
     entries = {}
 }

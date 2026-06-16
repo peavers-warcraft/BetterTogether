@@ -1,5 +1,5 @@
 --[[ SelfState.lua
-  Reads the player's OWN out-of-combat state into DuoReady.self (spec §3, §5, §7).
+  Reads the player's OWN out-of-combat state into BetterTogether.self (spec §3, §5, §7).
   All reads are local-player and unrestricted out of combat (self-report, §6.1).
 
   Two groups of fields, matching the two wire messages:

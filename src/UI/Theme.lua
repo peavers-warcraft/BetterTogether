@@ -1,5 +1,5 @@
 --[[ UI/Theme.lua
-  The single source of truth for DuoReady's look: palette, fonts, spacing, backdrop
+  The single source of truth for BetterTogether's look: palette, fonts, spacing, backdrop
   presets, icon paths, and the small texture helpers every widget shares. No frames
   are created here — only constants + pure helpers. Loaded before Widgets/Row/pages
   so all of them theme from one place. (ns.UI.Theme)

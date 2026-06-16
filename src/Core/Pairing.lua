@@ -2,11 +2,11 @@
   Invite-and-accept pairing by character name, persisted across sessions.
 
   Flow (works over WHISPER — no party required):
-    Player A: /dr invite Amy          -> whispers an INVITE to Amy
+    Player A: /bt invite Amy          -> whispers an INVITE to Amy
     Player B: popup "Peavers wants to pair"  [Accept] [Decline]
-              (or /dr accept)          -> bonds + whispers ACCEPT back
+              (or /bt accept)          -> bonds + whispers ACCEPT back
     Player A: receives ACCEPT          -> bonds
-  Both save the partner's full name to DuoReadyCharDB and auto-reconnect every
+  Both save the partner's full name to BetterTogetherCharDB and auto-reconnect every
   login. Only the bonded partner's HELLO/SNAP/CARD are accepted (Comm gate).
 ]]
 
@@ -17,7 +17,7 @@ local Pairing = {}
 ns.Pairing = Pairing
 
 local pendingInviteTo = nil   -- name we invited (awaiting their ACCEPT)
-local pendingInviteFrom = nil -- name that invited us (for /dr accept fallback)
+local pendingInviteFrom = nil -- name that invited us (for /bt accept fallback)
 
 -- Name/identity helpers live in ns.Util (shared with Comm). Aliased locally for
 -- brevity; ShortName stays exposed on the module for Core's slash commands + Dashboard.
@@ -119,11 +119,11 @@ end
 function Pairing.Invite(name)
   local target = fullName(name)
   if not target then
-    ns:Print(L["usage: "] .. "|cffffff00/dr invite CharacterName|r")
+    ns:Print(L["usage: "] .. "|cffffff00/bt invite CharacterName|r")
     return
   end
   if shortName(target) == UnitName("player") then
-    ns:Print(L["you can't pair with yourself (try "] .. "|cffffff00/dr selftest|r" .. L[" for that)."])
+    ns:Print(L["you can't pair with yourself (try "] .. "|cffffff00/bt selftest|r" .. L[" for that)."])
     return
   end
   pendingInviteTo = target
@@ -226,8 +226,8 @@ end
 -- ---------------------------------------------------------------------------
 -- Accept/Decline confirmation popup
 -- ---------------------------------------------------------------------------
-StaticPopupDialogs["DUOREADY_INVITE"] = {
-  text = "|cff66ccffDuoReady|r\n" .. L["%s wants to pair readiness dashboards with you."],
+StaticPopupDialogs["BETTERTOGETHER_INVITE"] = {
+  text = "|cff66ccffBetterTogether|r\n" .. L["%s wants to pair readiness dashboards with you."],
   button1 = ACCEPT or "Accept",
   button2 = DECLINE or "Decline",
   OnAccept = function() Pairing.Accept() end,
@@ -245,8 +245,8 @@ function Pairing.OnMessage(mtype, rest, sender)
   if mtype == "INVITE" then
     local from = rest:match("^(.+)$") or sender
     pendingInviteFrom = from
-    ns:Print("|cffffff00" .. shortName(from) .. "|r " .. L["wants to pair. Accept with "] .. "|cffffff00/dr accept|r" .. L[" or use the popup."])
-    StaticPopup_Show("DUOREADY_INVITE", shortName(from))
+    ns:Print("|cffffff00" .. shortName(from) .. "|r " .. L["wants to pair. Accept with "] .. "|cffffff00/bt accept|r" .. L[" or use the popup."])
+    StaticPopup_Show("BETTERTOGETHER_INVITE", shortName(from))
 
   elseif mtype == "ACCEPT" then
     local from = rest:match("^(.+)$") or sender

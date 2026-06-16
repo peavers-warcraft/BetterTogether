@@ -78,16 +78,16 @@ end
 -- Build the canvas
 -- ---------------------------------------------------------------------------
 local function buildPanel()
-  local panel = CreateFrame("Frame", "DuoReadySettingsPanel")
-  panel.name = "DuoReady"
+  local panel = CreateFrame("Frame", "BetterTogetherSettingsPanel")
+  panel.name = "BetterTogether"
 
   local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
   title:SetPoint("TOPLEFT", 16, -16)
-  title:SetText("DuoReady — " .. L["Partner Readiness Dashboard"])
+  title:SetText("BetterTogether — " .. L["Partner Readiness Dashboard"])
 
   local sub = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
-  sub:SetText(L["Type |cffffff00/dr|r for quick commands."])
+  sub:SetText(L["Type |cffffff00/bt|r for quick commands."])
 
   -- Two columns: left = general/thresholds, right = checks/visibility.
   local leftX, rightX = 16, 320
@@ -214,8 +214,8 @@ function Settings.Init()
 
   if _G.Settings and Settings.RegisterCanvasLayoutCategory then
     -- Modern (Dragonflight+/Midnight) Settings API.
-    local category = _G.Settings.RegisterCanvasLayoutCategory(panel, "DuoReady")
-    category.ID = "DuoReady"
+    local category = _G.Settings.RegisterCanvasLayoutCategory(panel, "BetterTogether")
+    category.ID = "BetterTogether"
     _G.Settings.RegisterAddOnCategory(category)
     categoryID = category
   elseif InterfaceOptions_AddCategory then
@@ -233,7 +233,7 @@ function Settings.Open()
     InterfaceOptionsFrame_OpenToCategory(Settings.panel)
     InterfaceOptionsFrame_OpenToCategory(Settings.panel) -- twice: known Blizzard quirk
   else
-    ns:Print("settings UI unavailable; use |cffffff00/dr|r commands")
+    ns:Print("settings UI unavailable; use |cffffff00/bt|r commands")
   end
 end
 

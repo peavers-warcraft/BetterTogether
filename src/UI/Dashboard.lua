@@ -57,7 +57,7 @@ local function applyScale()
 end
 
 -- Diagnostic: dump the numbers that drive scaling so the default can be tuned to
--- match a reference addon (e.g. Plumber). Invoked via `/dr scaleinfo`.
+-- match a reference addon (e.g. Plumber). Invoked via `/bt scaleinfo`.
 function Dashboard.PrintScaleInfo()
   local pw, ph = GetPhysicalScreenSize()
   ns:Print(string.format("physical screen: %s x %s", tostring(pw), tostring(ph)))
@@ -467,7 +467,7 @@ end
 function Dashboard.Init()
   if panel then return end
 
-  panel = CreateFrame("Frame", "DuoReadyPanel", UIParent, "ButtonFrameTemplate")
+  panel = CreateFrame("Frame", "BetterTogetherPanel", UIParent, "ButtonFrameTemplate")
   panel:SetSize(WIDTH_EXPANDED, 360)
   panel:SetClampedToScreen(true)
   panel:SetMovable(true); panel:EnableMouse(true)
@@ -479,7 +479,7 @@ function Dashboard.Init()
   -- Closing the panel (Escape, X, or otherwise) clears the desired-visibility
   -- flag so a later refresh won't re-show it.
   panel:SetScript("OnHide", function() shouldShow = false end)
-  table.insert(UISpecialFrames, "DuoReadyPanel")  -- Escape closes the panel
+  table.insert(UISpecialFrames, "BetterTogetherPanel")  -- Escape closes the panel
 
   if panel.TitleContainer then
     panel.TitleContainer:EnableMouse(true); panel.TitleContainer:RegisterForDrag("LeftButton")
@@ -536,7 +536,7 @@ function Dashboard.Init()
   panel.navDiv = navDiv
 
   -- Scrollable content host (fixed window; content scrolls — Plumber-style)
-  host = CreateFrame("ScrollFrame", "DuoReadyScroll", content, "UIPanelScrollFrameTemplate")
+  host = CreateFrame("ScrollFrame", "BetterTogetherScroll", content, "UIPanelScrollFrameTemplate")
   -- Anchor top AND bottom to content so the scroll viewport's clip edge tracks the
   -- real inset bounds; with only a fixed inner-height estimate the last row spills
   -- past the bottom border before scrolling (same fix as the detail pane). Width is set live.
@@ -666,7 +666,7 @@ function Dashboard.RestorePosition()
 end
 -- Intentional no-op: the lock state (ns.db.locked) is enforced lazily inside the
 -- drag handlers (OnDragStart bails when locked), so there is nothing to re-apply
--- when it toggles. Kept as a stable hook for callers (Settings, /dr lock).
+-- when it toggles. Kept as a stable hook for callers (Settings, /bt lock).
 function Dashboard.ApplyLock() end
 function Dashboard.SetScale(s) ns.db.scale = s; applyScale() end
 function Dashboard.Show() shouldShow = true; if panel then panel:Show() end end

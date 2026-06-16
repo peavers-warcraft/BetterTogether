@@ -1,7 +1,7 @@
 --[[ Locales/enUS.lua
   Localization table (ns.L), loaded before every consumer.
 
-  DuoReady uses the gettext-style "English-as-key" convention: call sites read
+  BetterTogether uses the gettext-style "English-as-key" convention: call sites read
   L["Some English text"] and the default (enUS) locale returns the key verbatim.
   This keeps the source readable and means a missing translation can never render
   a blank or raise an error — it simply falls back to the English source string.

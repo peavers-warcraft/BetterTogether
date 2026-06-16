@@ -1,4 +1,4 @@
-# DuoReady — Partner Readiness Dashboard
+# BetterTogether — Partner Readiness Dashboard
 ### WoW Addon · Build Specification (handoff-ready)
 
 **Target game version:** World of Warcraft: Midnight, Patch 12.0.x (Interface `120000`)
@@ -50,7 +50,7 @@ Built for duo play (e.g. a Holy Paladin + BM Hunter couple), a shape almost no a
 ## 4. Comm protocol
 
 ### 4.1 Prefix
-- Registered prefix: `"DuoReady"` (≤16 chars ✓) via `C_ChatInfo.RegisterAddonMessagePrefix("DuoReady")` on load.
+- Registered prefix: `"BetterTogether"` (≤16 chars ✓) via `C_ChatInfo.RegisterAddonMessagePrefix("BetterTogether")` on load.
 - Channel: `"PARTY"` for all normal syncs (both players are partied in the open world).
 - **[VERIFY IN-CLIENT]** Confirm `PARTY` delivery works in the open world when not in an instance (expected yes). Fallback: `WHISPER` to partner's name if party delivery is unreliable.
 
@@ -95,10 +95,10 @@ If payload > 240 chars, split into `SNAP|1|i/n|<chunk>` and reassemble on receip
 ## 5. State model
 
 ```
-DuoReady.self      = { ...own live readiness, recomputed on relevant events... }
-DuoReady.partner   = { ...last decoded SNAP from partner, + lastSeen timestamp... }
-DuoReady.linked    = boolean         -- true once HELLO handshake completed
-DuoReady.partnerName = string|nil
+BetterTogether.self      = { ...own live readiness, recomputed on relevant events... }
+BetterTogether.partner   = { ...last decoded SNAP from partner, + lastSeen timestamp... }
+BetterTogether.linked    = boolean         -- true once HELLO handshake completed
+BetterTogether.partnerName = string|nil
 ```
 
 - `partner.lastSeen` drives a **stale** indicator: if no SNAP in >30s, dim the panel and show "waiting for <name>…".
@@ -118,11 +118,11 @@ Two paths; **self-report is the v1 default** because it is restriction-proof and
 ## 7. Files / module layout
 
 ```
-DuoReady/
-  DuoReady.toc
+BetterTogether/
+  BetterTogether.toc
   Core.lua            -- addon namespace, event frame, init, saved vars
   Comm.lua            -- prefix reg, send/receive, throttle queue, (de)serialize
-  SelfState.lua       -- reads OWN quest/durability/bags/consumables -> DuoReady.self
+  SelfState.lua       -- reads OWN quest/durability/bags/consumables -> BetterTogether.self
   Consumables.lua     -- spellID tables for current-tier flask/food/rune/wpn buffs
   Snapshot.lua        -- build SNAP payload from self; decode incoming SNAP -> partner
   UI/
@@ -136,12 +136,12 @@ DuoReady/
 ### 7.1 TOC essentials
 ```
 ## Interface: 120000
-## Title: DuoReady
+## Title: BetterTogether
 ## Notes: Partner readiness dashboard for duo play.
 ## Author: <you>
 ## Version: 1.0.0
-## SavedVariables: DuoReadyDB
-## IconTexture: Interface\AddOns\DuoReady\Media\icon
+## SavedVariables: BetterTogetherDB
+## IconTexture: Interface\AddOns\BetterTogether\Media\icon
 ```
 (Per contest rules: **do not** use an AI-generated project avatar; the in-game `IconTexture` is fine but the CurseForge page avatar must be human-made.)
 
@@ -188,7 +188,7 @@ A compact, movable, lockable frame showing the **partner's** readiness. Layout t
 ## 9. Midnight restriction compliance (do not violate)
 
 - **Never** read protected combat values (`UnitHealth`, `UnitPower`, auras, cooldowns) on tainted paths during combat. v1 simply does not operate in combat.
-- Guard any aura/unit reads with `issecretvalue()` / `canaccesssecrets()` checks before doing arithmetic/concat/compare, to avoid the "tainted by DuoReady" error spam seen in early Midnight addons.
+- Guard any aura/unit reads with `issecretvalue()` / `canaccesssecrets()` checks before doing arithmetic/concat/compare, to avoid the "tainted by BetterTogether" error spam seen in early Midnight addons.
 - All cross-player data flows via self-report over addon comms, never via reading the other player's protected state.
 - Respect the addon-message throttle (§4.2); exceeding it can disconnect the client.
 - **[VERIFY IN-CLIENT]** Confirm `AddOnMessageLockdown` result only triggers in combat-restricted states (expected) and never fires for our out-of-combat sends.

@@ -1,5 +1,5 @@
 ## Interface: 120000
-## Title: DuoReady
+## Title: BetterTogether
 ## Notes: Partner readiness dashboard for duo play.
 ## Author: Chris (peavers-warcraft)
 ## Version: 1.0.0
@@ -8,10 +8,10 @@
 ## X-Localizations: enUS
 
 ## X-Website: https://github.com/peavers-warcraft
-## X-Source-Code: https://github.com/peavers-warcraft/DuoReady
+## X-Source-Code: https://github.com/peavers-warcraft/BetterTogether
 
-## SavedVariables: DuoReadyDB
-## SavedVariablesPerCharacter: DuoReadyCharDB
+## SavedVariables: BetterTogetherDB
+## SavedVariablesPerCharacter: BetterTogetherCharDB
 
 Changelog.lua
 

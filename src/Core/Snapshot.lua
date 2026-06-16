@@ -1,5 +1,5 @@
 --[[ Snapshot.lua
-  Build a SNAP payload from DuoReady.self; decode an incoming SNAP into a partner
+  Build a SNAP payload from BetterTogether.self; decode an incoming SNAP into a partner
   table. Also the shared readiness-verdict computation (spec §4.4, §8.2).
 
   Zero-dependency wire format (spec §4.4 recommends this over LibSerialize):
@@ -30,7 +30,7 @@ local function parseKV(payload)
 end
 
 -- ---------------------------------------------------------------------------
--- Encode DuoReady.self -> payload string (the part after "SNAP|<proto>|").
+-- Encode BetterTogether.self -> payload string (the part after "SNAP|<proto>|").
 -- ---------------------------------------------------------------------------
 --- @return string payload Pipe-delimited SNAP body (kept under the chunk threshold).
 function Snapshot.Encode()

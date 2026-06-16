@@ -60,7 +60,7 @@ deploy_to_path() {
     rm -f "$target_path/.peavers.yml"
     rm -rf "$target_path/.idea"
     rm -f "$target_path"/*.iml
-    rm -f "$target_path/DuoReady-Spec.md"
+    rm -f "$target_path/BetterTogether-Spec.md"
 
     echo -e "${GREEN}✓ Deployed to: ${YELLOW}$target_path${NC}"
     return 0

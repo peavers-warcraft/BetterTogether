@@ -10,6 +10,6 @@ $TARGET_PATH = "$WOW_PATH\Interface\AddOns\$ADDON_NAME"
 Write-Host "Deploying $ADDON_NAME to $TARGET_PATH" -ForegroundColor Green
 
 # Use robocopy for fast copying, exclude non-addon files
-robocopy . $TARGET_PATH /MIR /XD .git .github .idea .claude /XF local_deploy.ps1 local_deploy.sh .gitignore .editorconfig .pkgmeta .peavers.yml DuoReady-Spec.md /NFL /NDL /NJH /NJS /nc /ns /np
+robocopy . $TARGET_PATH /MIR /XD .git .github .idea .claude /XF local_deploy.ps1 local_deploy.sh .gitignore .editorconfig .pkgmeta .peavers.yml BetterTogether-Spec.md /NFL /NDL /NJH /NJS /nc /ns /np
 
 Write-Host "[OK] Done!" -ForegroundColor Green
