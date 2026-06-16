@@ -5,7 +5,7 @@
 ## Author: Peavers
 ## Version: 1.0.1
 
-## IconTexture: Interface\Icons\INV_Misc_GroupNeedMore
+## IconTexture: Interface\AddOns\BetterTogether\src\Media\Icon.tga
 ## Category-enUS: Peavers
 ## X-Localizations: enUS
 
