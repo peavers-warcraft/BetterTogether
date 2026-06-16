@@ -37,6 +37,25 @@ local shouldShow = true
 local function hostWidth(detail) return WIDTH_EXPANDED - HOST_X - PAD - (detail and (DETAIL_W + 18) or 0) end
 local function scrollWidth(detail) return hostWidth(detail) - SCROLLBAR_W end
 
+-- Auto-fit. The expanded panel is a fixed WIDTH_EXPANDED x PANEL_H_EXPANDED, sized
+-- to nearly fill a standard 768-unit-tall UI. On large monitors / low WoW UI-scale
+-- (notably 4K, where UIParent sits near its 768px floor) a raw scale of 1.0 makes
+-- the panel dominate the screen, so we derive a base scale that keeps it within a
+-- comfortable fraction of the available space. ns.db.scale then multiplies this:
+-- 1.0 = the recommended fit; raise or lower to taste.
+local FIT_W, FIT_H = 0.82, 0.62   -- most of the screen the panel should ever cover
+local function fitScale()
+  local sw, sh = UIParent:GetWidth(), UIParent:GetHeight()
+  if not (sw and sh) or sw <= 0 or sh <= 0 then return 1.0 end
+  local s = math.min((sw * FIT_W) / WIDTH_EXPANDED, (sh * FIT_H) / PANEL_H_EXPANDED)
+  return math.max(0.5, math.min(1.0, s))   -- never upscale past the design size
+end
+
+local function applyScale()
+  if not panel then return end
+  panel:SetScale(math.max(0.4, math.min(2.0, fitScale() * (ns.db.scale or 1.0))))
+end
+
 -- ---------------------------------------------------------------------------
 -- Page registry (pages register at load; built lazily on first Select)
 -- ---------------------------------------------------------------------------
@@ -598,7 +617,10 @@ function Dashboard.Init()
   compact = buildCompact(content)
 
   Dashboard.RestorePosition()
-  panel:SetScale(ns.db.scale or 1.0)
+  applyScale()
+  -- Keep the fit current if the player changes resolution or WoW's UI scale.
+  ns:RegisterEvent("DISPLAY_SIZE_CHANGED", applyScale)
+  ns:RegisterEvent("UI_SCALE_CHANGED", applyScale)
   Dashboard.Select(ns.chardb.lastTab or "overview")
   Dashboard.ApplyMode()
   C_Timer.NewTicker(2.0, function() Dashboard.Refresh() end)
@@ -620,7 +642,7 @@ end
 -- drag handlers (OnDragStart bails when locked), so there is nothing to re-apply
 -- when it toggles. Kept as a stable hook for callers (Settings, /dr lock).
 function Dashboard.ApplyLock() end
-function Dashboard.SetScale(s) ns.db.scale = s; if panel then panel:SetScale(s) end end
+function Dashboard.SetScale(s) ns.db.scale = s; applyScale() end
 function Dashboard.Show() shouldShow = true; if panel then panel:Show() end end
 function Dashboard.Hide() shouldShow = false; if panel then panel:Hide() end end
 function Dashboard.ApplyMode()
