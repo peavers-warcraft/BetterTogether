@@ -13,3 +13,4 @@ ignore:
   - BetterTogether-Spec.md
   - local_deploy.sh
   - local_deploy.ps1
+  - banner.webp

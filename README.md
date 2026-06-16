@@ -1,6 +1,10 @@
-# BetterTogether
+<div align="center">
+
+![BetterTogether](https://raw.githubusercontent.com/peavers-warcraft/BetterTogether/master/banner.webp)
 
 **The game is better with someone. This makes it even better.**
+
+</div>
 
 > A living dashboard of the person you adventure with: see at a glance that your
 > partner is flasked, fed, repaired, and on the right quest *before* the pull — plus
