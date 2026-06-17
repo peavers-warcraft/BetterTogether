@@ -368,7 +368,7 @@ SlashCmdList["BETTERTOGETHER"] = function(msg)
     ns:Print("debug " .. (ns.db.debug and "ON" or "OFF"))
 
   elseif cmd == "scaleinfo" then
-    if ns.Dashboard and ns.Dashboard.PrintScaleInfo then ns.Dashboard.PrintScaleInfo() end
+    if ns.UI.Scaling and ns.UI.Scaling.PrintScaleInfo then ns.UI.Scaling.PrintScaleInfo() end
 
   elseif cmd == "help" or cmd == "" and false then
     -- (falls through to default below)

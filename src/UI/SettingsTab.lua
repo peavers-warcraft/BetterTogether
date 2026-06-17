@@ -1,6 +1,6 @@
 --[[ UI/SettingsTab.lua
   The "Settings" bottom-tab page (ns.UI.SettingsTab). A single scrollable column on
-  the left paired with a right-side tips pane (driven by Dashboard.SetSettingTip) that
+  the left paired with a right-side tips pane (driven by SettingsView.SetSettingTip) that
   explains whatever option the cursor is on — the same left-content / right-detail
   shape the dashboard pages use. Sections are sub-headed, checkbox groups lay out in
   two columns, sliders are the themed Widgets.Slider, and the Privacy "share all /
@@ -79,7 +79,7 @@ local GROUPS = {
 -- ---------------------------------------------------------------------------
 local function attachTip(frame, title, body, icon)
   frame:HookScript("OnEnter", function()
-    if ns.Dashboard and ns.Dashboard.SetSettingTip then ns.Dashboard.SetSettingTip(title, body, icon) end
+    if ns.UI.SettingsView and ns.UI.SettingsView.SetSettingTip then ns.UI.SettingsView.SetSettingTip(title, body, icon) end
   end)
 end
 

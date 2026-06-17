@@ -10,7 +10,13 @@
 
 local addonName, ns = ...
 local S = ns.UI.Shared
+local Theme = ns.UI.Theme
+local DP = ns.UI.DetailPane
 local L = ns.L
+
+ns.Pages = ns.Pages or {}
+local M = {}
+ns.Pages.Inventory = M
 
 -- Partner's on-demand item strings. DETAIL[id] is one of: a string (resolved full
 -- "item:…" with bonus IDs), the boolean true (a request is in flight), or nil
@@ -67,6 +73,148 @@ local function onDetailResolved(id)
 end
 if ns.InvSync then ns.InvSync.onDetailResolved = onDetailResolved end
 
+-- ---------------------------------------------------------------------------
+-- Item detail renderer (custom, non-tooltip — styled as part of the addon). Draws
+-- into the shared detail pane (ns.UI.DetailPane). Reads the page-owned target state
+-- (shownItemID / shownPending) so a re-render after the partner's full string lands
+-- picks up the upgrade without re-clicking.
+-- ---------------------------------------------------------------------------
+local shownItemID, shownPending
+
+local function renderItemDetail()
+  local id = shownItemID
+  if not id then return end
+  local icon = (select(5, GetItemInfoInstant(id))) or 134400
+  DP.chip.icon:SetTexture(icon); DP.chip:Show()
+
+  -- Awaiting the partner's full item string: show the (correct) name + a loading
+  -- note rather than the base item's stats, so the item level doesn't visibly jump
+  -- once the upgraded string lands.
+  if shownPending then
+    local nm, _, quality = GetItemInfo(id)
+    DP.name:SetText(nm or (L["item:"] .. tostring(id)))
+    local qr, qg, qb = Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3]
+    local qc = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
+    if qc then qr, qg, qb = qc.r or qr, qc.g or qg, qc.b or qb end
+    DP.name:SetTextColor(qr, qg, qb)
+    DP.qchip:Hide(); DP.qlabel:Hide()
+    local sp = DP.StartSpinner(-66)
+    DP.text:ClearAllPoints()
+    DP.text:SetJustifyH("CENTER")
+    if sp then DP.text:SetPoint("TOP", sp, "BOTTOM", 0, -14)
+    else DP.text:SetPoint("TOPLEFT", DP.body, "TOPLEFT", 2, -60) end
+    DP.text:SetText(Theme.C.muted2 .. string.format(L["Loading %s's item details…"], ns.Util.PartnerName(L["your partner"])) .. "|r")
+    DP.text:Show()
+    DP.body:SetHeight(150)
+    if DP.scroll then DP.scroll:SetVerticalScroll(0); DP.scroll:UpdateScrollChildRect() end
+    return
+  end
+
+  -- id may be a number (GetItemByID) or an item string with bonuses (GetHyperlink,
+  -- so upgraded item level / stats render correctly).
+  local data
+  if C_TooltipInfo then
+    if type(id) == "string" and C_TooltipInfo.GetHyperlink then data = C_TooltipInfo.GetHyperlink(id)
+    elseif C_TooltipInfo.GetItemByID then data = C_TooltipInfo.GetItemByID(id) end
+  end
+  if not data or not data.lines or #data.lines == 0 then
+    local numId = type(id) == "number" and id or tonumber(tostring(id):match("item:(%d+)"))
+    if numId and C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(numId) end
+    DP.name:SetText(Theme.C.muted2 .. L["Loading…"] .. "|r")
+    DP.text:Hide(); DP.qchip:Hide(); DP.qlabel:Hide()
+    DP.StartSpinner(-58)
+    DP.body:SetHeight(110); if DP.scroll then DP.scroll:UpdateScrollChildRect() end
+    return
+  end
+
+  DP.StopSpinner()
+  DP.text:SetJustifyH("LEFT")
+  local function surface(t) if TooltipUtil and TooltipUtil.SurfaceArgs then TooltipUtil.SurfaceArgs(t) end end
+  surface(data)
+  local l1 = data.lines[1]; surface(l1)
+  DP.name:SetText((l1 and l1.leftText) or (L["item:"] .. id))
+  local qr, qg, qb = Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3]
+  if l1 and l1.leftColor and l1.leftColor.GetRGB then qr, qg, qb = l1.leftColor:GetRGB() end
+  DP.name:SetTextColor(qr, qg, qb)
+
+  -- One fontstring for the whole body (like a tooltip) — single anchor, so no
+  -- multi-widget interaction can ever shift it. Per-line color preserved; buff
+  -- icons rendered inline + size-normalized so they sit on the text baseline.
+  local BASE = 60
+  local parts = {}
+  for i = 2, #data.lines do
+    local line = data.lines[i]; surface(line)
+    local lt = line.leftText or ""
+    if not (lt:find("Professions") or lt:find("CraftingQuality")) then
+      local s = lt:gsub("|T([^:|]+):[^|]*|t", "|T%1:18:18:0:-3|t")  -- normalize inline icons
+      if line.rightText and line.rightText ~= "" then s = s .. "   " .. Theme.C.white .. line.rightText .. "|r" end
+      if line.leftColor and line.leftColor.GetRGB then
+        local r, g, b = line.leftColor:GetRGB()
+        s = Theme.Hex({ r, g, b }) .. s .. "|r"
+      end
+      parts[#parts + 1] = s
+    end
+  end
+  DP.text:ClearAllPoints()
+  DP.text:SetPoint("TOPLEFT", DP.body, "TOPLEFT", 2, -BASE)
+  DP.text:SetText(table.concat(parts, "\n"))
+  DP.text:Show()
+
+  -- crafting quality as a chip, below the text block
+  local q
+  if C_TradeSkillUI then
+    if C_TradeSkillUI.GetItemCraftedQualityByItemInfo then local ok, v = pcall(C_TradeSkillUI.GetItemCraftedQualityByItemInfo, id); if ok then q = v end end
+    if not q and C_TradeSkillUI.GetItemReagentQualityByItemInfo then local ok, v = pcall(C_TradeSkillUI.GetItemReagentQualityByItemInfo, id); if ok then q = v end end
+  end
+  local qAtlas
+  if q and q > 0 then
+    for _, a in ipairs({ "Professions-ChatIcon-Quality-Tier" .. q, "Professions-Icon-Quality-Tier" .. q }) do
+      if Theme.AtlasExists(a) then qAtlas = a; break end
+    end
+  end
+  local contentH = 60 + (DP.text:GetStringHeight() or 0)
+  if qAtlas then
+    DP.qchip.icon:SetTexCoord(0, 1, 0, 1); DP.qchip.icon:SetAtlas(qAtlas)
+    DP.qchip:ClearAllPoints()
+    DP.qchip:SetPoint("TOPLEFT", DP.text, "BOTTOMLEFT", 0, -10)
+    DP.qchip:Show()
+    DP.qlabel:SetText(L["Quality "] .. Theme.C.white .. L["Tier "] .. q .. "|r"); DP.qlabel:Show()
+    contentH = contentH + 10 + 30
+  else
+    DP.qchip:Hide(); DP.qlabel:Hide()
+  end
+  DP.body:SetHeight(contentH + 14)
+  if DP.scroll then DP.scroll:UpdateScrollChildRect() end
+end
+
+-- Show an item in the detail pane. `pending` means this is the base item shown while
+-- we await the partner's full string; renderItemDetail then shows a "loading"
+-- placeholder instead of the (about to change) base item level.
+local function showItemDetail(id, pending)
+  shownItemID = id
+  shownPending = pending and true or nil
+  DP.Render(renderItemDetail)
+end
+
+-- A partner's full item string (bonus IDs) just arrived (InvSync calls this). If the
+-- detail pane is currently showing this item (matched by base itemID), upgrade it in
+-- place so the correct ilvl/stats render without the user re-clicking.
+function M.OnItemDetailArrived(id, itemString)
+  if not (DP.IsActiveRenderer(renderItemDetail) and DP.IsShown()) then return end
+  local cur = shownItemID
+  local curID = type(cur) == "number" and cur or tonumber(tostring(cur):match("item:(%d+)"))
+  if curID == tonumber(id) then
+    shownItemID = itemString
+    shownPending = nil
+    renderItemDetail()
+  end
+end
+
+-- The base item's data finished loading: re-render in place if we're still showing it.
+ns:RegisterEvent("GET_ITEM_INFO_RECEIVED", function()
+  if DP.IsActiveRenderer(renderItemDetail) and DP.IsShown() then renderItemDetail() end
+end)
+
 -- Hover-preview + click-lock detail controller (S.makePinController). Our show()
 -- renders the item — the resolved upgrade if cached, else the base item (a "loading"
 -- placeholder for gear until the full string lands, so its item level doesn't jump
@@ -79,9 +227,7 @@ local detail = S.makePinController({
     if fetchTimer then fetchTimer:Cancel(); fetchTimer = nil end
     local cached = DETAIL[id]
     local pending = type(cached) ~= "string" and type(id) == "number" and isGear(id)
-    if ns.Dashboard and ns.Dashboard.ShowItemDetail then
-      ns.Dashboard.ShowItemDetail(type(cached) == "string" and cached or id, pending)
-    end
+    showItemDetail(type(cached) == "string" and cached or id, pending)
 
     if type(id) ~= "number" or cached ~= nil then wantID = nil; return end
     if not (ns.Comm and ns.Comm.RequestItemDetail) then return end

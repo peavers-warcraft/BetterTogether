@@ -20,16 +20,68 @@ local S = ns.UI.Shared
 local Theme = ns.UI.Theme
 local Widgets = ns.UI.Widgets
 local Row = ns.UI.Row
+local DP = ns.UI.DetailPane
 local L = ns.L
+
+ns.Pages = ns.Pages or {}
+local M = {}
+ns.Pages.Achievements = M
 
 local SEC_GAP = Theme.SECTION_GAP
 local CARD_H = 64
 
+-- Achievement detail renderer: draws a shared achievement into the detail pane
+-- (ns.UI.DetailPane), reusing its chip/name/body widgets. `a` = { id, name, icon,
+-- points, desc, together, status, youStr, partnerStr } — youStr/partnerStr are
+-- preformatted "earned on" dates (or nil).
+local shownAchv
+
+local function renderAchvDetail()
+  local a = shownAchv
+  if not a then return end
+  DP.StopSpinner()
+  DP.text:SetJustifyH("LEFT")
+  DP.hint:Hide()
+  DP.chip.icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
+  DP.chip.icon:SetTexture(a.icon or 134400)
+  DP.chip:Show()
+  DP.name:SetText(a.name or (L["Achievement #"] .. (a.id or 0)))
+  if a.together then DP.name:SetTextColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3])
+  else DP.name:SetTextColor(Theme.CREAM[1], Theme.CREAM[2], Theme.CREAM[3]) end
+
+  local parts = {}
+  if a.together then
+    parts[#parts + 1] = Theme.C.ready .. L["You both earned this the same day."] .. "|r"
+  else
+    local st = ({ youOnly = Theme.C.info .. L["Only you have earned this."] .. "|r",
+                  partnerOnly = Theme.C.warn .. string.format(L["Only %s has earned this."], ns.Util.PartnerName(L["your partner"])) .. "|r" })[a.status]
+    if st then parts[#parts + 1] = st end
+  end
+  if (a.points or 0) > 0 then parts[#parts + 1] = Theme.C.gold .. a.points .. L[" points"] .. "|r" end
+  parts[#parts + 1] = " "
+  if a.desc and a.desc ~= "" then
+    parts[#parts + 1] = Theme.C.soft .. a.desc .. "|r"; parts[#parts + 1] = " "
+  end
+  parts[#parts + 1] = Theme.C.gold .. L["You"] .. "|r  " .. (a.youStr or (Theme.C.dim .. L["not earned"] .. "|r"))
+  parts[#parts + 1] = Theme.C.gold .. ns.Util.PartnerName(L["Partner"]) .. "|r  " .. (a.partnerStr or (Theme.C.dim .. L["not earned"] .. "|r"))
+
+  DP.qchip:Hide(); DP.qlabel:Hide()
+  DP.text:ClearAllPoints()
+  DP.text:SetPoint("TOPLEFT", DP.body, "TOPLEFT", 2, -60)
+  DP.text:SetText(table.concat(parts, "\n"))
+  DP.text:Show()
+  DP.body:SetHeight(60 + (DP.text:GetStringHeight() or 0) + 14)
+  if DP.scroll then DP.scroll:UpdateScrollChildRect() end
+end
+
+local function showAchvDetail(a)
+  shownAchv = a
+  DP.Render(renderAchvDetail)
+end
+
 -- Hover-preview + click-lock detail controller (shared with Quests/Inventory).
 local detail = S.makePinController({
-  show = function(_, a)
-    if ns.Dashboard and ns.Dashboard.ShowAchievementDetail then ns.Dashboard.ShowAchievementDetail(a) end
-  end,
+  show = function(_, a) showAchvDetail(a) end,
 })
 
 -- Which era is on screen; survives refreshes. requested[] guards against re-spamming

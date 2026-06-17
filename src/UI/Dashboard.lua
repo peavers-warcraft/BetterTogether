@@ -1,11 +1,17 @@
 --[[ UI/Dashboard.lua
-  The tab shell (ns.Dashboard). Native ButtonFrame with a shared header
-  (portrait + class-colored name + verdict), a Plumber-style left nav list, and a
-  content host that swaps page frames. Pages register via Dashboard.RegisterPage.
-  The collapse (-) button drops to a compact single-column readiness card.
+  The tab shell orchestrator (ns.Dashboard). It owns the page registry and the panel
+  lifecycle: it builds the root frame, then hands construction of each piece to a focused
+  module under src/UI/Shell/ (Header, Nav, DetailPane, Compact, SettingsView, Scaling)
+  and to the proactive Presence layer. Select swaps the active page into the scroll host;
+  Refresh fans the current context out to whichever view is showing.
 
-  Public API kept stable for Core.lua: Init / Refresh / ApplyMode / OpenTab /
-  Select / Show / Hide / SetScale / SavePosition / RestorePosition / ApplyLock.
+  Pages register via Dashboard.RegisterPage and own everything they draw — including what
+  they render into the shared DetailPane (ns.UI.DetailPane). The collapse (-) button
+  drops to ns.UI.Compact's single-column readiness card.
+
+  Public API kept stable for Core.lua / SettingsTab: Init / Refresh / ApplyMode / OpenTab /
+  OpenSettings / Select / ShowMainTab / Show / Hide / SetScale / SavePosition /
+  RestorePosition / ApplyLock.
 ]]
 
 local addonName, ns = ...
@@ -15,72 +21,19 @@ local Dashboard = {}
 ns.Dashboard = Dashboard
 
 local S = ns.UI.Shared
-local Theme = ns.UI.Theme
 local Widgets = ns.UI.Widgets
-local Row = ns.UI.Row
+local Layout = ns.UI.Layout
 local L = ns.L
 
-local WIDTH_COMPACT, WIDTH_EXPANDED, PAD = 320, 1280, 16
-local PANEL_H_EXPANDED = 640        -- FIXED expanded height; content scrolls
-local CONTENT_TOP = 60
-local NAV_W, NAV_BTN_H = 178, 32
-local HOST_X = PAD + NAV_W + 18
-local SCROLLBAR_W = 26
-local DETAIL_W = 300         -- right-side preview pane width (when a page uses it)
+local WIDTH_COMPACT, WIDTH_EXPANDED = Layout.WIDTH_COMPACT, Layout.WIDTH_EXPANDED
+local PANEL_H_EXPANDED, CONTENT_TOP = Layout.PANEL_H_EXPANDED, Layout.CONTENT_TOP
+local PAD, HOST_X = Layout.PAD, Layout.HOST_X
 
-local panel, host, nav
-local navButtons = {}
+local panel, host
 local pages, pagesByKey = {}, {}
 local activeKey
-local shouldShow = true
-
--- Top-level (bottom) tabs that swap the whole view: the existing dashboard vs the
--- consolidated settings page (Plumber-style bottom tab bar).
-local MAIN_TABS = { { key = "dashboard", label = L["Dashboard"] }, { key = "settings", label = L["Settings"] } }
-local mainTabBar, settingsHost, settingsFrame
-local mainTabButtons = {}
 local activeMainTab = "dashboard"
-
-local function hostWidth(detail) return WIDTH_EXPANDED - HOST_X - PAD - (detail and (DETAIL_W + 18) or 0) end
-local function scrollWidth(detail) return hostWidth(detail) - SCROLLBAR_W end
--- Settings view has no left nav, so its content starts at PAD; it DOES reserve a
--- right-side tips pane (DETAIL_W, like the dashboard pages' detail pane), so the
--- scrollable column stops short of that pane.
-local function settingsHostWidth() return WIDTH_EXPANDED - PAD - PAD - (DETAIL_W + 18) end
-local function settingsScrollWidth() return settingsHostWidth() - SCROLLBAR_W end
-
--- Auto-fit. The expanded panel is a fixed WIDTH_EXPANDED x PANEL_H_EXPANDED, sized
--- to nearly fill a standard 768-unit-tall UI. On large monitors / low WoW UI-scale
--- (notably 4K, where UIParent sits near its 768px floor) a raw scale of 1.0 makes
--- the panel dominate the screen, so we derive a base scale that keeps it within a
--- comfortable fraction of the available space. ns.db.scale then multiplies this:
--- 1.0 = the recommended fit; raise or lower to taste.
-local FIT_W, FIT_H = 0.66, 0.46   -- target fraction of the screen the panel covers
-local function fitScale()
-  local sw, sh = UIParent:GetWidth(), UIParent:GetHeight()
-  if not (sw and sh) or sw <= 0 or sh <= 0 then return 1.0 end
-  local s = math.min((sw * FIT_W) / WIDTH_EXPANDED, (sh * FIT_H) / PANEL_H_EXPANDED)
-  return math.max(0.5, math.min(1.0, s))   -- never upscale past the design size
-end
-
-local function applyScale()
-  if not panel then return end
-  panel:SetScale(math.max(0.4, math.min(2.0, fitScale() * (ns.db.scale or 1.0))))
-end
-
--- Diagnostic: dump the numbers that drive scaling so the default can be tuned to
--- match a reference addon (e.g. Plumber). Invoked via `/bt scaleinfo`.
-function Dashboard.PrintScaleInfo()
-  local pw, ph = GetPhysicalScreenSize()
-  ns:Print(string.format("physical screen: %s x %s", tostring(pw), tostring(ph)))
-  ns:Print(string.format("UIParent: effScale=%.3f height=%.0f units", UIParent:GetEffectiveScale(), UIParent:GetHeight()))
-  ns:Print(string.format("fitScale=%.3f  db.scale=%.2f", fitScale(), ns.db.scale or 1.0))
-  if panel then
-    ns:Print(string.format("panel: scale=%.3f effScale=%.3f  -> ~%.0f%% of screen height",
-      panel:GetScale(), panel:GetEffectiveScale(), 100 * (PANEL_H_EXPANDED * panel:GetScale()) / UIParent:GetHeight()))
-  end
-  if _G.PlumberDB ~= nil or _G.Plumber ~= nil then ns:Print("(Plumber is loaded — compare its panel size by eye)") end
-end
+local shouldShow = true
 
 -- ---------------------------------------------------------------------------
 -- Page registry (pages register at load; built lazily on first Select)
@@ -113,459 +66,8 @@ end
 Dashboard.GetContext = getContext
 
 -- ---------------------------------------------------------------------------
--- Header
--- ---------------------------------------------------------------------------
-local function getPortrait()
-  return (panel.PortraitContainer and panel.PortraitContainer.portrait) or panel.portrait
-end
-local function setTitle(text)
-  if panel.SetTitle then panel:SetTitle(text)
-  elseif panel.TitleContainer and panel.TitleContainer.TitleText then panel.TitleContainer.TitleText:SetText(text)
-  elseif _G[panel:GetName() .. "TitleText"] then _G[panel:GetName() .. "TitleText"]:SetText(text) end
-end
-local function setPortrait(cls)
-  local p = getPortrait(); if not p then return end
-  local atlas = (cls and cls ~= "") and ("classicon-" .. strlower(cls)) or nil
-  if atlas and Theme.AtlasExists(atlas) then p:SetTexCoord(0, 1, 0, 1); p:SetAtlas(atlas)
-  elseif cls and cls ~= "" and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[cls] then
-    p:SetTexture(Theme.CLASS_CIRCLES); p:SetTexCoord(unpack(CLASS_ICON_TCOORDS[cls]))
-  else p:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark"); p:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
-end
-local function updateHeader(snap, verdict)
-  local r, g, b = S.classColor(snap.cls)
-  setPortrait(snap.cls)
-  setTitle(S.hex(r, g, b) .. (ns.state.partnerName or L["Partner"]) .. "|r")
-  panel.vDot:SetTexture(Theme.INDICATOR[verdict] or Theme.INDICATOR.wait)
-  local vc = Theme.VERDICT_RGB[verdict] or Theme.VERDICT_RGB.wait
-  panel.vLabel:SetText(Theme.VERDICT_LABEL[verdict] or ""); panel.vLabel:SetTextColor(vc[1], vc[2], vc[3])
-end
-
--- ---------------------------------------------------------------------------
--- Presence + readiness toasts (the proactive layer over the passive panel).
--- Refresh runs ~every 2s and computes a verdict; we watch for *transitions* and
--- surface a toast + a ping on the title-bar dot. Seeded silently on first sight so
--- a login / reload doesn't fire, and readiness toasts only fire between two "real"
--- verdicts (never to/from the wait/offline placeholders), so flicker stays quiet.
--- ---------------------------------------------------------------------------
-local function classIcon(cls)
-  local atlas = (cls and cls ~= "") and ("classicon-" .. strlower(cls)) or nil
-  if atlas and Theme.AtlasExists(atlas) then return atlas end
-  return "Interface\\Icons\\Achievement_GuildPerk_EverybodysFriend"   -- friendly fallback
-end
-
-local toastSeeded, lastLinked, lastVerdict
-local REAL_VERDICT = { ready = true, amber = true, red = true }
-local function notifyTransitions(snap, verdict)
-  local Toast = ns.UI and ns.UI.Toast
-  local linked = ns.state.linked == true
-  local name = ns.state.partnerName or L["Partner"]
-  if not toastSeeded then   -- first observation this session: record, don't announce
-    toastSeeded, lastLinked, lastVerdict = true, linked, verdict
-    return
-  end
-  local pal, snd = Theme.VERDICT_RGB, SOUNDKIT
-  if Toast then
-    if linked ~= lastLinked then
-      if linked then
-        Toast.Show({ title = string.format(L["%s is online"], name), subtitle = L["Linked up — syncing now."],
-          icon = classIcon(snap.cls), color = pal.ready, sound = snd and snd.UI_BNET_TOAST })
-      else
-        Toast.Show({ title = string.format(L["%s went offline"], name), subtitle = L["You'll reconnect automatically."],
-          icon = classIcon(snap.cls), color = pal.offline, sound = snd and snd.UI_BNET_TOAST })
-      end
-    elseif linked and verdict ~= lastVerdict and REAL_VERDICT[verdict] and REAL_VERDICT[lastVerdict] then
-      if verdict == "ready" then
-        Toast.Show({ title = string.format(L["%s is ready"], name), subtitle = L["All checks passed — good to pull."],
-          icon = classIcon(snap.cls), color = pal.ready, sound = snd and snd.READY_CHECK })
-      elseif verdict == "red" and lastVerdict == "ready" then
-        Toast.Show({ title = string.format(L["%s is no longer ready"], name), subtitle = L["Hold up — a check needs attention."],
-          icon = classIcon(snap.cls), color = pal.red, sound = snd and snd.UI_BNET_TOAST })
-      end
-    end
-  end
-  if verdict ~= lastVerdict and panel and panel.vPing then
-    panel.vPing(pal[verdict] or pal.wait)   -- visual cue even when toasts are off
-  end
-  lastLinked, lastVerdict = linked, verdict
-end
-
--- ---------------------------------------------------------------------------
--- Nav buttons
--- ---------------------------------------------------------------------------
-local function setNavActive(b, active)
-  b.active = active
-  b.accent:SetShown(active)
-  b.glow:SetShown(active)
-  if active then
-    b.hl:Hide()
-    b.fs:SetTextColor(Theme.CREAM[1], Theme.CREAM[2], Theme.CREAM[3])
-  else
-    if b.stub then b.fs:SetTextColor(0.5, 0.5, 0.5) else b.fs:SetTextColor(0.86, 0.82, 0.70) end
-  end
-end
-
-local function makeNavButton(parent, desc)
-  local b = CreateFrame("Button", nil, parent)
-  b:SetSize(NAV_W - 10, NAV_BTN_H)
-  b.key, b.stub = desc.key, desc.stub
-
-  -- active glow (gold gradient fading right)
-  local glow = b:CreateTexture(nil, "BACKGROUND"); glow:SetAllPoints(b); glow:SetColorTexture(1, 1, 1, 1)
-  if CreateColor then
-    glow:SetGradient("HORIZONTAL", CreateColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3], 0.28), CreateColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3], 0.0))
-  else glow:SetColorTexture(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3], 0.16) end
-  glow:Hide(); b.glow = glow
-  -- hover highlight (subtle white)
-  local hl = b:CreateTexture(nil, "BACKGROUND"); hl:SetAllPoints(b); hl:SetColorTexture(1, 1, 1, 0.06); hl:Hide()
-  b.hl = hl
-  -- left accent bar
-  local accent = b:CreateTexture(nil, "ARTWORK"); accent:SetSize(3, NAV_BTN_H - 10)
-  accent:SetPoint("LEFT", b, "LEFT", 2, 0); accent:SetColorTexture(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3]); accent:Hide()
-  b.accent = accent
-
-  local fs = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  fs:SetPoint("LEFT", b, "LEFT", 14, 0); fs:SetText(desc.label)
-  local ff = GameFontHighlight:GetFont(); if ff then fs:SetFont(ff, 15) end
-  b.fs = fs
-
-  b:SetScript("OnEnter", function() if not b.active then hl:Show() end end)
-  b:SetScript("OnLeave", function() hl:Hide() end)
-  b:SetScript("OnClick", function() Dashboard.Select(desc.key) end)
-  setNavActive(b, false)
-  return b
-end
-
--- ---------------------------------------------------------------------------
--- Bottom tab bar (Dashboard / Settings) — native Blizzard frame tabs that hang
--- beneath the panel, the same PanelTabButtonTemplate used by the character sheet,
--- spellbook, etc. PanelTemplates_* drives selection so the active tab reads as
--- "connected" to the frame exactly like a stock UI panel.
--- ---------------------------------------------------------------------------
-local function setMainTabActive(b, active)
-  b.active = active
-  if active then PanelTemplates_SelectTab(b) else PanelTemplates_DeselectTab(b) end
-end
-
-local tabCount = 0
-local function makeMainTabButton(parent, def)
-  tabCount = tabCount + 1
-  local b = CreateFrame("Button", "BetterTogetherMainTab" .. tabCount, parent, "PanelTabButtonTemplate")
-  b.key = def.key
-  b:SetText(def.label)
-  b:SetScript("OnClick", function() Dashboard.ShowMainTab(def.key) end)
-  PanelTemplates_TabResize(b, 0)
-  return b
-end
-
--- ---------------------------------------------------------------------------
--- Compact card widgets
--- ---------------------------------------------------------------------------
-local function buildCompact(content)
-  local c = {}
-  c.roleIcon = content:CreateTexture(nil, "ARTWORK"); c.roleIcon:SetSize(15, 15)
-  c.idFS = content:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); c.idFS:SetJustifyH("LEFT")
-  c.ilvlFS = content:CreateFontString(nil, "OVERLAY", "GameFontNormal"); c.ilvlFS:SetJustifyH("RIGHT")
-  c.rows = {}
-  for _, key in ipairs({ "durability", "flask", "food", "wpn", "rune", "bags" }) do
-    c.rows[key] = Row.Create(content, Theme.ICON[key])
-  end
-  c.sep = content:CreateTexture(nil, "ARTWORK"); c.sep:SetColorTexture(1, 1, 1, 0.08); c.sep:SetHeight(1)
-  c.details = content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  c.details:SetJustifyH("LEFT"); c.details:SetJustifyV("TOP"); c.details:SetSpacing(6)
-  local ff = GameFontHighlight:GetFont(); if ff then c.details:SetFont(ff, 14) end
-  return c
-end
-
-local function showCompact(c, shown)
-  c.roleIcon:SetShown(shown); c.idFS:SetShown(shown); c.ilvlFS:SetShown(shown)
-  c.sep:SetShown(shown); c.details:SetShown(shown)
-  for _, r in pairs(c.rows) do if not shown then r:SetShown(false) end end
-end
-
-local function layoutCompact(c, snap, r, g, b)
-  local W = WIDTH_COMPACT
-  local content = panel.content
-  c.roleIcon:ClearAllPoints(); c.roleIcon:SetPoint("TOPLEFT", content, "TOPLEFT", PAD, -PAD)
-  local sp, role = S.specInfo(snap.spec)
-  local ra = S.roleAtlas(role)
-  if ra then c.roleIcon:SetAtlas(ra); c.roleIcon:Show() else c.roleIcon:Hide() end
-  c.idFS:ClearAllPoints()
-  if c.roleIcon:IsShown() then c.idFS:SetPoint("LEFT", c.roleIcon, "RIGHT", 5, 0)
-  else c.idFS:SetPoint("TOPLEFT", content, "TOPLEFT", PAD, -PAD) end
-  local parts = {}
-  local cn = S.classDisplayName(snap.cls)
-  if sp ~= "" or cn ~= "" then table.insert(parts, S.hex(r, g, b) .. (sp ~= "" and (sp .. " ") or "") .. cn .. "|r") end
-  if (snap.lvl or 0) > 0 then table.insert(parts, Theme.C.faint .. L["Lv "] .. snap.lvl .. "|r") end
-  c.idFS:SetText(table.concat(parts, "  "))
-  c.ilvlFS:ClearAllPoints(); c.ilvlFS:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PAD, -PAD)
-  c.ilvlFS:SetText((snap.ilvl or 0) > 0 and (Theme.C.gold .. snap.ilvl .. "|r " .. Theme.C.muted .. L["ilvl"] .. "|r") or "")
-
-  S.setRowValues(c.rows, snap)
-  local anchor, count = c.idFS, 0
-  for _, key in ipairs({ "durability", "flask", "food", "wpn", "rune", "bags" }) do
-    local row = c.rows[key]
-    if ns.db.show[key] then
-      row:SetShown(true); row:SetWidth(W - 2 * PAD)
-      row.frame:ClearAllPoints()
-      row.frame:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", anchor == c.idFS and 0 or 0, anchor == c.idFS and -8 or -3)
-      anchor = row.frame; count = count + 1
-    else row:SetShown(false) end
-  end
-
-  local combined = {}
-  for _, fn in ipairs({ S.cActivity, S.cStatus, S.cGear, S.cQuest }) do
-    local s = fn(snap); if s ~= "" then table.insert(combined, s) end
-  end
-  local text = table.concat(combined, "\n")
-  c.details:SetWidth(W - 2 * PAD)
-  c.sep:ClearAllPoints(); c.sep:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -8); c.sep:SetWidth(W - 2 * PAD)
-  c.sep:SetShown(text ~= "")
-  c.details:ClearAllPoints(); c.details:SetPoint("TOPLEFT", c.sep, "BOTTOMLEFT", 0, -8); c.details:SetText(text)
-
-  local h = PAD + 16 + 8 + count * (Row.HEIGHT + 3)
-  if text ~= "" then h = h + 8 + 1 + 8 + c.details:GetStringHeight() end
-  return h + PAD
-end
-
--- ---------------------------------------------------------------------------
 -- Build
 -- ---------------------------------------------------------------------------
-local compact
-
--- ---------------------------------------------------------------------------
--- Item detail renderer (custom, non-tooltip — styled as part of the addon)
--- ---------------------------------------------------------------------------
--- Play the detail pane's loading spinner, centered under the header at `y`. Idempotent
--- so a re-render mid-wait (e.g. GET_ITEM_INFO_RECEIVED) doesn't restart the comet.
-local function startDetailSpinner(y)
-  local sp = panel and panel.detailSpinner
-  if not sp then return end
-  sp:ClearAllPoints()
-  sp:SetPoint("TOP", panel.detailBody, "TOP", 0, y or -64)
-  if not sp:IsShown() then sp:Start() end
-  return sp
-end
-local function stopDetailSpinner()
-  if panel and panel.detailSpinner then panel.detailSpinner:Stop() end
-end
-
-local function renderItemDetail()
-  local id = panel._detailID
-  if not id then return end
-  local icon = (select(5, GetItemInfoInstant(id))) or 134400
-  panel.detailChip.icon:SetTexture(icon); panel.detailChip:Show()
-
-  -- Awaiting the partner's full item string: show the (correct) name + a loading
-  -- note rather than the base item's stats, so the item level doesn't visibly jump
-  -- once the upgraded string lands.
-  if panel._detailPending then
-    local nm, _, quality = GetItemInfo(id)
-    panel.detailName:SetText(nm or (L["item:"] .. tostring(id)))
-    local qr, qg, qb = Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3]
-    local qc = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
-    if qc then qr, qg, qb = qc.r or qr, qc.g or qg, qc.b or qb end
-    panel.detailName:SetTextColor(qr, qg, qb)
-    panel.detailQChip:Hide(); panel.detailQLabel:Hide()
-    local sp = startDetailSpinner(-66)
-    panel.detailText:ClearAllPoints()
-    panel.detailText:SetJustifyH("CENTER")
-    if sp then panel.detailText:SetPoint("TOP", sp, "BOTTOM", 0, -14)
-    else panel.detailText:SetPoint("TOPLEFT", panel.detailBody, "TOPLEFT", 2, -60) end
-    panel.detailText:SetText(Theme.C.muted2 .. string.format(L["Loading %s's item details…"], ns.Util.PartnerName(L["your partner"])) .. "|r")
-    panel.detailText:Show()
-    panel.detailBody:SetHeight(150)
-    if panel.detailScroll then panel.detailScroll:SetVerticalScroll(0); panel.detailScroll:UpdateScrollChildRect() end
-    return
-  end
-
-  -- id may be a number (GetItemByID) or an item string with bonuses (GetHyperlink,
-  -- so upgraded item level / stats render correctly).
-  local data
-  if C_TooltipInfo then
-    if type(id) == "string" and C_TooltipInfo.GetHyperlink then data = C_TooltipInfo.GetHyperlink(id)
-    elseif C_TooltipInfo.GetItemByID then data = C_TooltipInfo.GetItemByID(id) end
-  end
-  if not data or not data.lines or #data.lines == 0 then
-    local numId = type(id) == "number" and id or tonumber(tostring(id):match("item:(%d+)"))
-    if numId and C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(numId) end
-    panel.detailName:SetText(Theme.C.muted2 .. L["Loading…"] .. "|r")
-    panel.detailText:Hide(); panel.detailQChip:Hide(); panel.detailQLabel:Hide()
-    startDetailSpinner(-58)
-    panel.detailBody:SetHeight(110); if panel.detailScroll then panel.detailScroll:UpdateScrollChildRect() end
-    return
-  end
-
-  stopDetailSpinner()
-  panel.detailText:SetJustifyH("LEFT")
-  local function surface(t) if TooltipUtil and TooltipUtil.SurfaceArgs then TooltipUtil.SurfaceArgs(t) end end
-  surface(data)
-  local l1 = data.lines[1]; surface(l1)
-  panel.detailName:SetText((l1 and l1.leftText) or (L["item:"] .. id))
-  local qr, qg, qb = Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3]
-  if l1 and l1.leftColor and l1.leftColor.GetRGB then qr, qg, qb = l1.leftColor:GetRGB() end
-  panel.detailName:SetTextColor(qr, qg, qb)
-
-  -- One fontstring for the whole body (like a tooltip) — single anchor, so no
-  -- multi-widget interaction can ever shift it. Per-line color preserved; buff
-  -- icons rendered inline + size-normalized so they sit on the text baseline.
-  local BASE = 60
-  local parts = {}
-  for i = 2, #data.lines do
-    local line = data.lines[i]; surface(line)
-    local lt = line.leftText or ""
-    if not (lt:find("Professions") or lt:find("CraftingQuality")) then
-      local s = lt:gsub("|T([^:|]+):[^|]*|t", "|T%1:18:18:0:-3|t")  -- normalize inline icons
-      if line.rightText and line.rightText ~= "" then s = s .. "   " .. Theme.C.white .. line.rightText .. "|r" end
-      if line.leftColor and line.leftColor.GetRGB then
-        local r, g, b = line.leftColor:GetRGB()
-        s = Theme.Hex({ r, g, b }) .. s .. "|r"
-      end
-      parts[#parts + 1] = s
-    end
-  end
-  panel.detailText:ClearAllPoints()
-  panel.detailText:SetPoint("TOPLEFT", panel.detailBody, "TOPLEFT", 2, -BASE)
-  panel.detailText:SetText(table.concat(parts, "\n"))
-  panel.detailText:Show()
-
-  -- crafting quality as a chip, below the text block
-  local q
-  if C_TradeSkillUI then
-    if C_TradeSkillUI.GetItemCraftedQualityByItemInfo then local ok, v = pcall(C_TradeSkillUI.GetItemCraftedQualityByItemInfo, id); if ok then q = v end end
-    if not q and C_TradeSkillUI.GetItemReagentQualityByItemInfo then local ok, v = pcall(C_TradeSkillUI.GetItemReagentQualityByItemInfo, id); if ok then q = v end end
-  end
-  local qAtlas
-  if q and q > 0 then
-    for _, a in ipairs({ "Professions-ChatIcon-Quality-Tier" .. q, "Professions-Icon-Quality-Tier" .. q }) do
-      if Theme.AtlasExists(a) then qAtlas = a; break end
-    end
-  end
-  local contentH = 60 + (panel.detailText:GetStringHeight() or 0)
-  if qAtlas then
-    panel.detailQChip.icon:SetTexCoord(0, 1, 0, 1); panel.detailQChip.icon:SetAtlas(qAtlas)
-    panel.detailQChip:ClearAllPoints()
-    panel.detailQChip:SetPoint("TOPLEFT", panel.detailText, "BOTTOMLEFT", 0, -10)
-    panel.detailQChip:Show()
-    panel.detailQLabel:SetText(L["Quality "] .. Theme.C.white .. L["Tier "] .. q .. "|r"); panel.detailQLabel:Show()
-    contentH = contentH + 10 + 30
-  else
-    panel.detailQChip:Hide(); panel.detailQLabel:Hide()
-  end
-  panel.detailBody:SetHeight(contentH + 14)
-  if panel.detailScroll then panel.detailScroll:UpdateScrollChildRect() end
-end
-
--- Quest detail (Quests tab): reuses the item pane's chip/name/body widgets to
--- render a quest's status + objectives. `q` = { id, title, status, you, partner }
--- where you/partner are { done, cur, total } (or nil if that side isn't on it).
-local function renderQuestDetail()
-  local q = panel._detailQuest
-  if not q then return end
-  stopDetailSpinner()
-  panel.detailText:SetJustifyH("LEFT")
-  panel.detailHint:Hide()
-  Theme.ApplyIcon(panel.detailChip.icon, Theme.I_QUEST)
-  panel.detailChip:Show()
-  panel.detailName:SetText(q.title or (L["Quest #"] .. (q.id or 0)))
-  panel.detailName:SetTextColor(Theme.CREAM[1], Theme.CREAM[2], Theme.CREAM[3])
-
-  local function prog(side)
-    if not side then return Theme.C.dim .. L["not on this quest"] .. "|r" end
-    if side.done then return Theme.C.ready .. L["Complete"] .. "|r" end
-    if (side.total or 0) > 0 then return Theme.C.white .. (side.cur or 0) .. " / " .. side.total .. "|r" end
-    return Theme.C.white .. L["In progress"] .. "|r"
-  end
-
-  local parts = {}
-  local statusText = ({
-    both        = Theme.C.ready .. L["You're both on this quest."] .. "|r",
-    partnerOnly = Theme.C.warn .. string.format(L["Only %s is on this quest."], ns.Util.PartnerName(L["your partner"])) .. "|r",
-    youOnly     = Theme.C.info .. L["Only you are on this quest."] .. "|r",
-  })[q.status]
-  if statusText then parts[#parts + 1] = statusText end
-  parts[#parts + 1] = Theme.C.muted .. L["Quest ID"] .. "|r  " .. (q.id or 0)
-  parts[#parts + 1] = " "
-
-  -- Your side: real per-objective text when we're actually on the quest; else the
-  -- synced aggregate.
-  parts[#parts + 1] = Theme.C.gold .. L["Your progress"] .. "|r"
-  local objs = C_QuestLog and C_QuestLog.GetQuestObjectives
-    and C_QuestLog.GetQuestObjectives(q.id) or nil
-  if objs and #objs > 0 then
-    for _, o in ipairs(objs) do
-      parts[#parts + 1] = (o.finished and Theme.C.ready or Theme.C.soft) .. (o.text or "") .. "|r"
-    end
-  else
-    parts[#parts + 1] = prog(q.you)
-  end
-  parts[#parts + 1] = " "
-  parts[#parts + 1] = Theme.C.gold .. string.format(L["%s's progress"], ns.Util.PartnerName(L["Partner"])) .. "|r"
-  parts[#parts + 1] = prog(q.partner)
-
-  panel.detailQChip:Hide(); panel.detailQLabel:Hide()
-  panel.detailText:ClearAllPoints()
-  panel.detailText:SetPoint("TOPLEFT", panel.detailBody, "TOPLEFT", 2, -60)
-  panel.detailText:SetText(table.concat(parts, "\n"))
-  panel.detailText:Show()
-
-  panel.detailBody:SetHeight(60 + (panel.detailText:GetStringHeight() or 0) + 14)
-  if panel.detailScroll then panel.detailScroll:UpdateScrollChildRect() end
-end
-
--- Achievement detail (Achievements tab): reuses the item pane's chip/name/body to
--- show a shared achievement. `a` = { id, name, icon, points, desc, together, status,
--- youStr, partnerStr } — youStr/partnerStr are preformatted "earned on" dates (or nil).
-local function renderAchvDetail()
-  local a = panel._detailAchv
-  if not a then return end
-  stopDetailSpinner()
-  panel.detailText:SetJustifyH("LEFT")
-  panel.detailHint:Hide()
-  panel.detailChip.icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
-  panel.detailChip.icon:SetTexture(a.icon or 134400)
-  panel.detailChip:Show()
-  panel.detailName:SetText(a.name or (L["Achievement #"] .. (a.id or 0)))
-  if a.together then panel.detailName:SetTextColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3])
-  else panel.detailName:SetTextColor(Theme.CREAM[1], Theme.CREAM[2], Theme.CREAM[3]) end
-
-  local parts = {}
-  if a.together then
-    parts[#parts + 1] = Theme.C.ready .. L["You both earned this the same day."] .. "|r"
-  else
-    local st = ({ youOnly = Theme.C.info .. L["Only you have earned this."] .. "|r",
-                  partnerOnly = Theme.C.warn .. string.format(L["Only %s has earned this."], ns.Util.PartnerName(L["your partner"])) .. "|r" })[a.status]
-    if st then parts[#parts + 1] = st end
-  end
-  if (a.points or 0) > 0 then parts[#parts + 1] = Theme.C.gold .. a.points .. L[" points"] .. "|r" end
-  parts[#parts + 1] = " "
-  if a.desc and a.desc ~= "" then
-    parts[#parts + 1] = Theme.C.soft .. a.desc .. "|r"; parts[#parts + 1] = " "
-  end
-  parts[#parts + 1] = Theme.C.gold .. L["You"] .. "|r  " .. (a.youStr or (Theme.C.dim .. L["not earned"] .. "|r"))
-  parts[#parts + 1] = Theme.C.gold .. ns.Util.PartnerName(L["Partner"]) .. "|r  " .. (a.partnerStr or (Theme.C.dim .. L["not earned"] .. "|r"))
-
-  panel.detailQChip:Hide(); panel.detailQLabel:Hide()
-  panel.detailText:ClearAllPoints()
-  panel.detailText:SetPoint("TOPLEFT", panel.detailBody, "TOPLEFT", 2, -60)
-  panel.detailText:SetText(table.concat(parts, "\n"))
-  panel.detailText:Show()
-  panel.detailBody:SetHeight(60 + (panel.detailText:GetStringHeight() or 0) + 14)
-  if panel.detailScroll then panel.detailScroll:UpdateScrollChildRect() end
-end
-
--- Slim + recolor a UIPanelScrollFrameTemplate scrollbar (thin gold thumb, no arrows).
-local function styleScrollbar(sf)
-  local sb = sf and sf.ScrollBar
-  if not sb then return end
-  local up, down = sb.ScrollUpButton, sb.ScrollDownButton
-  for _, b in ipairs({ up, down }) do
-    if b then b:SetAlpha(0); b:SetSize(1, 1); b:EnableMouse(false); b:SetScript("OnShow", b.Hide); b:Hide() end
-  end
-  sb:SetWidth(8)
-  local thumb = sb.GetThumbTexture and sb:GetThumbTexture()
-  if thumb then thumb:SetColorTexture(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3], 0.5); thumb:SetWidth(6) end
-end
-
 function Dashboard.Init()
   if panel then return end
 
@@ -612,247 +114,33 @@ function Dashboard.Init()
     botSh:SetGradient("VERTICAL", CreateColor(0, 0, 0, 0.5), CreateColor(0, 0, 0, 0))
   end
 
-  -- title-bar verdict + collapse toggle. The dot + label double as the sync
-  -- indicator (gray dot / "WAITING" until the partner's data lands), so keep them
-  -- prominent — a larger, clearly-coloured label rather than the old small text.
-  local vDot = panel:CreateTexture(nil, "OVERLAY"); vDot:SetSize(18, 18)
-  if panel.CloseButton then vDot:SetPoint("RIGHT", panel.CloseButton, "LEFT", -2, 0)
-  else vDot:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -8, -6) end
-  panel.vDot = vDot
+  ns.UI.Header.Build(panel)
 
-  -- A soft circular ring that blooms out from the dot and fades when the verdict
-  -- changes — an at-a-glance "something just happened" cue. Drawn behind the dot
-  -- (ARTWORK) so it never hides it; a single OnUpdate runs only while playing.
-  local ping = panel:CreateTexture(nil, "ARTWORK")
-  ping:SetSize(16, 16); ping:SetPoint("CENTER", vDot, "CENTER", 0, 0)
-  ping:SetColorTexture(1, 1, 1, 1)
-  local pingMask = panel:CreateMaskTexture()
-  pingMask:SetAllPoints(ping); pingMask:SetTexture(Theme.CIRCLE_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-  ping:AddMaskTexture(pingMask); ping:Hide()
-  local pingDriver = CreateFrame("Frame", nil, panel); pingDriver:Hide()
-  local P_DUR, P_BASE, P_PEAK = 0.6, 16, 40
-  pingDriver:SetScript("OnUpdate", function(self, dt)
-    self.t = (self.t or 0) + dt
-    local f = self.t / P_DUR
-    if f >= 1 then ping:Hide(); self:Hide(); return end
-    ping:SetSize(P_BASE + (P_PEAK - P_BASE) * f, P_BASE + (P_PEAK - P_BASE) * f)
-    ping:SetAlpha(0.5 * (1 - f))
-  end)
-  panel.vPing = function(col)
-    col = col or Theme.GOLD
-    ping:SetColorTexture(col[1], col[2], col[3], 1)
-    pingDriver.t = 0; ping:Show(); pingDriver:Show()
-  end
-  local vLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal"); vLabel:SetPoint("RIGHT", vDot, "LEFT", -5, 0)
-  local vff = GameFontNormal:GetFont(); if vff then vLabel:SetFont(vff, 14) end
-  panel.vLabel = vLabel
-  local cb = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate"); cb:SetSize(24, 20)
-  cb:SetPoint("RIGHT", vLabel, "LEFT", -8, 0); cb:SetText("–")
-  cb:SetScript("OnClick", function() ns.db.expanded = not ns.db.expanded; Dashboard.ApplyMode() end)
-  panel.collapseBtn = cb
-
-  -- left nav + divider + content host
-  nav = CreateFrame("Frame", nil, content)
-  nav:SetPoint("TOPLEFT", content, "TOPLEFT", PAD, -PAD)
-  nav:SetSize(NAV_W, 10)
-  local navDiv = content:CreateTexture(nil, "ARTWORK")
-  navDiv:SetColorTexture(1, 1, 1, 0.08); navDiv:SetWidth(1)
-  navDiv:SetPoint("TOPLEFT", content, "TOPLEFT", PAD + NAV_W + 8, -PAD)
-  navDiv:SetPoint("BOTTOMLEFT", content, "BOTTOMLEFT", PAD + NAV_W + 8, PAD)
-  panel.navDiv = navDiv
-
-  -- Scrollable content host (fixed window; content scrolls — Plumber-style)
+  -- Scrollable content host (fixed window; content scrolls — Plumber-style). Anchor
+  -- top AND bottom to content so the scroll viewport's clip edge tracks the real inset
+  -- bounds; with only a fixed inner-height estimate the last row spills past the bottom
+  -- border before scrolling. Width is set live by Refresh.
   host = CreateFrame("ScrollFrame", "BetterTogetherScroll", content, "UIPanelScrollFrameTemplate")
-  -- Anchor top AND bottom to content so the scroll viewport's clip edge tracks the
-  -- real inset bounds; with only a fixed inner-height estimate the last row spills
-  -- past the bottom border before scrolling (same fix as the detail pane). Width is set live.
   host:SetPoint("TOPLEFT", content, "TOPLEFT", HOST_X, -PAD)
   host:SetPoint("BOTTOMLEFT", content, "BOTTOMLEFT", HOST_X, PAD)
-  host:SetWidth(scrollWidth())
+  host:SetWidth(Layout.scrollWidth())
   host:EnableMouseWheel(true)
   host:SetScript("OnMouseWheel", function(self, delta)
     local new = math.min(self:GetVerticalScrollRange(), math.max(0, self:GetVerticalScroll() - delta * 45))
     self:SetVerticalScroll(new)
   end)
   panel.host = host
-  styleScrollbar(host)
+  Widgets.StyleScrollbar(host)
 
-  -- Full-width scroll host for the Settings tab (no left nav / detail pane). Lives
-  -- alongside `host`; ShowMainTab toggles which one is visible. Hidden until needed.
-  settingsHost = CreateFrame("ScrollFrame", "BetterTogetherSettingsScroll", content, "UIPanelScrollFrameTemplate")
-  settingsHost:SetPoint("TOPLEFT", content, "TOPLEFT", PAD, -PAD)
-  settingsHost:SetPoint("BOTTOMLEFT", content, "BOTTOMLEFT", PAD, PAD)
-  settingsHost:SetWidth(settingsScrollWidth())
-  settingsHost:EnableMouseWheel(true)
-  settingsHost:SetScript("OnMouseWheel", function(self, delta)
-    local new = math.min(self:GetVerticalScrollRange(), math.max(0, self:GetVerticalScroll() - delta * 45))
-    self:SetVerticalScroll(new)
-  end)
-  settingsHost:Hide()
-  panel.settingsHost = settingsHost
-  styleScrollbar(settingsHost)
-
-  -- Settings tips pane: a right-side helper column that mirrors the dashboard pages'
-  -- detail pane, but renders a plain explanation for the setting under the cursor.
-  -- A chip + gold title name the focused setting; the body holds the description. A
-  -- divider separates it from the scrollable settings column, just like detailDiv.
-  local sTipDiv = content:CreateTexture(nil, "ARTWORK")
-  sTipDiv:SetColorTexture(1, 1, 1, 0.08); sTipDiv:SetWidth(1)
-  sTipDiv:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PAD - DETAIL_W - 9, -PAD)
-  sTipDiv:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", -PAD - DETAIL_W - 9, PAD)
-  sTipDiv:Hide(); panel.settingsTipDiv = sTipDiv
-
-  local sTip = CreateFrame("Frame", nil, content)
-  sTip:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PAD, -PAD)
-  sTip:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", -PAD, PAD)
-  sTip:SetWidth(DETAIL_W)
-  local stHdr = Widgets.SectionHeader(sTip)
-  stHdr.label:SetPoint("TOPLEFT", sTip, "TOPLEFT", 0, 0)
-  Widgets.StyleHeader(stHdr, L["Settings help"], DETAIL_W)
-  panel.settingsTipHdr = stHdr
-  local stChip = Widgets.Chip(sTip, 40)
-  stChip:SetPoint("TOPLEFT", sTip, "TOPLEFT", 0, -42); stChip:Hide()
-  panel.settingsTipChip = stChip
-  local stName = sTip:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  stName:SetWidth(DETAIL_W - 52); stName:SetJustifyH("LEFT"); stName:SetJustifyV("MIDDLE")
-  stName:SetTextColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3])
-  stName:SetPoint("LEFT", stChip, "RIGHT", 10, 0); stName:Hide()
-  panel.settingsTipName = stName
-  local stText = sTip:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  stText:SetWidth(DETAIL_W - 2); stText:SetJustifyH("LEFT"); stText:SetJustifyV("TOP"); stText:SetSpacing(6)
-  local stff = GameFontHighlight:GetFont(); if stff then stText:SetFont(stff, Theme.FONT_BODY) end
-  panel.settingsTipText = stText
-  sTip:Hide(); panel.settingsTip = sTip
-
-  -- Right-side preview/detail pane (Plumber-style). Pages opt in via desc.detail.
-  local detailDiv = content:CreateTexture(nil, "ARTWORK")
-  detailDiv:SetColorTexture(1, 1, 1, 0.08); detailDiv:SetWidth(1)
-  detailDiv:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PAD - DETAIL_W - 9, -PAD)
-  detailDiv:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", -PAD - DETAIL_W - 9, PAD)
-  panel.detailDiv = detailDiv
-
-  local detail = CreateFrame("Frame", nil, content)
-  -- Anchor top AND bottom to content so the pane's height tracks the actual inset
-  -- bounds (not a fixed inner-height estimate); otherwise the scroll frame's clip edge
-  -- lands just past the bottom border and long tooltips peek out beneath it.
-  detail:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PAD, -PAD)
-  detail:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", -PAD, PAD)
-  detail:SetWidth(DETAIL_W)
-  panel.detail = detail
-  local dHdr = Widgets.SectionHeader(detail)
-  dHdr.label:SetPoint("TOPLEFT", detail, "TOPLEFT", 0, 0)
-  Widgets.StyleHeader(dHdr, L["Item Details"], DETAIL_W)
-  panel.detailHdr = dHdr
-  -- scrollable area (long recipe/item tooltips can exceed the pane height)
-  local dscroll = CreateFrame("ScrollFrame", nil, detail, "UIPanelScrollFrameTemplate")
-  dscroll:SetPoint("TOPLEFT", detail, "TOPLEFT", 0, -38)
-  dscroll:SetPoint("BOTTOMRIGHT", detail, "BOTTOMRIGHT", -16, 0)
-  dscroll:EnableMouseWheel(true)
-  dscroll:SetScript("OnMouseWheel", function(self, d)
-    self:SetVerticalScroll(math.min(self:GetVerticalScrollRange(), math.max(0, self:GetVerticalScroll() - d * 40)))
-  end)
-  panel.detailScroll = dscroll
-  styleScrollbar(dscroll)
-  local body = CreateFrame("Frame", nil, dscroll)
-  body:SetWidth(DETAIL_W - 18); body:SetHeight(10)
-  dscroll:SetScrollChild(body)
-  panel.detailBody = body
-  local hint = body:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  hint:SetPoint("TOPLEFT", body, "TOPLEFT", 2, -2); hint:SetWidth(DETAIL_W - 4); hint:SetJustifyH("LEFT")
-  hint:SetTextColor(0.6, 0.6, 0.62); hint:SetText(L["Hover an item to preview it here."])
-  panel.detailHint = hint
-  -- Custom (non-tooltip) item detail, styled as part of the addon:
-  -- chip (same as throughout) + name (vertically centered) + scanned lines.
-  local chip = Widgets.Chip(body, 46); chip:SetPoint("TOPLEFT", body, "TOPLEFT", 2, -2); chip:Hide()
-  panel.detailChip = chip
-
-  local dn = body:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  dn:SetPoint("LEFT", chip, "RIGHT", 10, 0)   -- single anchor (vertical center of chip)
-  dn:SetWidth(DETAIL_W - 64); dn:SetJustifyH("LEFT"); dn:SetJustifyV("MIDDLE"); dn:SetWordWrap(false)
-  panel.detailName = dn
-
-  local dt = body:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  dt:SetWidth(DETAIL_W - 26); dt:SetJustifyH("LEFT"); dt:SetJustifyV("TOP"); dt:SetSpacing(5)
-  local dff = GameFontHighlight:GetFont(); if dff then dt:SetFont(dff, 13) end
-  dt:Hide(); panel.detailText = dt
-
-  -- Loading spinner for the detail pane: shown while we wait on the partner's full
-  -- item string (the on-demand inventory lookup) or on the base item data load.
-  local dspin = Widgets.Spinner(body, 36); panel.detailSpinner = dspin
-
-  -- crafting-quality shown as one of our chips
-  local qchip = Widgets.Chip(body, 30); qchip:Hide(); panel.detailQChip = qchip
-  local qlbl = body:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  qlbl:SetPoint("LEFT", qchip, "RIGHT", 10, 0); qlbl:SetJustifyH("LEFT"); qlbl:Hide()
-  local qff = GameFontHighlight:GetFont(); if qff then qlbl:SetFont(qff, 14) end
-  panel.detailQLabel = qlbl
-  detail:Hide()
-
-  ns:RegisterEvent("GET_ITEM_INFO_RECEIVED", function()
-    if panel and panel._detailID and panel.detail:IsShown() then renderItemDetail() end
-  end)
-
-  -- sort + build nav
+  -- Sort pages by order, then let each shell part build itself.
   table.sort(pages, function(a, b) return (a.order or 99) < (b.order or 99) end)
-  local prev
-  for _, desc in ipairs(pages) do
-    -- A page can open a new category: extra space + a thin gold divider above it.
-    local gap = 2
-    if desc.separator and prev then
-      gap = 14
-      local div = nav:CreateTexture(nil, "ARTWORK")
-      div:SetHeight(1); div:SetColorTexture(1, 1, 1, 1)
-      if CreateColor then
-        div:SetGradient("HORIZONTAL", CreateColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3], 0.0),
-          CreateColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3], 0.45))
-      else div:SetVertexColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3], 0.3) end
-      div:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 6, -(gap / 2))
-      div:SetPoint("TOPRIGHT", prev, "BOTTOMRIGHT", -6, -(gap / 2))
-    end
-
-    local b = makeNavButton(nav, desc)
-    if prev then b:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -gap)
-    else b:SetPoint("TOPLEFT", nav, "TOPLEFT", 0, 0) end
-    prev = b
-    table.insert(navButtons, b)
-  end
-
-  compact = buildCompact(content)
-
-  -- Bottom tab bar: native Blizzard frame tabs hung beneath the panel, the same
-  -- look the character sheet / spellbook use. The tabs' top edge tucks up under the
-  -- panel's bottom border so the active tab reads as part of the frame; subsequent
-  -- tabs overlap by the template's built-in side art (the standard -15 inset).
-  mainTabBar = CreateFrame("Frame", nil, panel)
-  mainTabBar:SetPoint("TOPLEFT", panel, "BOTTOMLEFT", 16, 1)
-  mainTabBar:SetHeight(32)
-  -- The modern uiframe-tab atlas tabs have visible rounded end-caps (not the old
-  -- template's transparent side padding), so they sit flush — no negative inset, or
-  -- they'd overlap each other. A couple px of gap keeps the caps from touching.
-  local TAB_GAP = 2
-  local prevTab, totalW = nil, 0
-  for _, def in ipairs(MAIN_TABS) do
-    local b = makeMainTabButton(mainTabBar, def)
-    if prevTab then
-      b:SetPoint("LEFT", prevTab, "RIGHT", TAB_GAP, 0)
-      totalW = totalW + (b:GetWidth() or 0) + TAB_GAP
-    else
-      b:SetPoint("TOPLEFT", mainTabBar, "TOPLEFT", 0, 0)
-      totalW = totalW + (b:GetWidth() or 0)
-    end
-    prevTab = b
-    table.insert(mainTabButtons, b)
-  end
-  -- Give the bar a real width. Without it the container's rect is indeterminate, so
-  -- GetLeft() returns nil and the child tabs — anchored to it — never resolve a
-  -- screen position and silently don't draw (even though their textures are shown).
-  mainTabBar:SetWidth(math.max(1, totalW))
+  ns.UI.Nav.Build(panel, content, pages)
+  ns.UI.DetailPane.Build(content)
+  ns.UI.SettingsView.Build(content)
+  ns.UI.Compact.Build(content)
 
   Dashboard.RestorePosition()
-  applyScale()
-  -- Keep the fit current if the player changes resolution or WoW's UI scale.
-  ns:RegisterEvent("DISPLAY_SIZE_CHANGED", applyScale)
-  ns:RegisterEvent("UI_SCALE_CHANGED", applyScale)
+  ns.UI.Scaling.Init(panel)
   Dashboard.Select(ns.chardb.lastTab or "overview")
   Dashboard.ShowMainTab(ns.chardb.lastMainTab or "dashboard")
   Dashboard.ApplyMode()
@@ -875,71 +163,13 @@ end
 -- drag handlers (OnDragStart bails when locked), so there is nothing to re-apply
 -- when it toggles. Kept as a stable hook for callers (Settings, /bt lock).
 function Dashboard.ApplyLock() end
-function Dashboard.SetScale(s) ns.db.scale = s; applyScale() end
+function Dashboard.SetScale(s) ns.db.scale = s; ns.UI.Scaling.Apply() end
 function Dashboard.Show() shouldShow = true; if panel then panel:Show() end end
 function Dashboard.Hide() shouldShow = false; if panel then panel:Hide() end end
 function Dashboard.ApplyMode()
   if not panel then return end
   panel.collapseBtn:SetText(ns.db.expanded and "–" or "+")
   Dashboard.Refresh()
-end
--- pending=true means this is the base item shown while we await the partner's full
--- string; renderItemDetail then shows a "loading" placeholder instead of the (about
--- to change) base item level.
-function Dashboard.ShowItemDetail(id, pending)
-  if not (panel and panel.detail:IsShown()) then return end
-  panel.detailHint:Hide()
-  panel._detailQuest = nil
-  panel._detailAchv = nil
-  panel._detailID = id
-  panel._detailPending = pending and true or nil
-  renderItemDetail()
-end
-
--- A partner's full item string (bonus IDs) just arrived. If the detail pane is
--- currently showing this item (matched by base itemID), upgrade it in place so the
--- correct ilvl/stats render without the user re-clicking.
-function Dashboard.OnItemDetailArrived(id, itemString)
-  if not (panel and panel.detail:IsShown() and panel._detailID) then return end
-  local cur = panel._detailID
-  local curID = type(cur) == "number" and cur or tonumber(tostring(cur):match("item:(%d+)"))
-  if curID == tonumber(id) then
-    panel._detailID = itemString
-    panel._detailPending = nil
-    renderItemDetail()
-  end
-end
-function Dashboard.ShowQuestDetail(q)
-  if not (panel and panel.detail:IsShown()) then return end
-  panel.detailHint:Hide()
-  panel._detailID = nil
-  panel._detailAchv = nil
-  panel._detailQuest = q
-  renderQuestDetail()
-end
-function Dashboard.ShowAchievementDetail(a)
-  if not (panel and panel.detail:IsShown()) then return end
-  panel.detailHint:Hide()
-  panel._detailID = nil
-  panel._detailQuest = nil
-  panel._detailAchv = a
-  renderAchvDetail()
-end
-function Dashboard.ClearDetail()
-  if not panel then return end
-  panel._detailID = nil
-  panel._detailQuest = nil
-  panel._detailAchv = nil
-  panel._detailPending = nil
-  stopDetailSpinner()
-  if panel.detailChip then panel.detailChip:Hide() end
-  if panel.detailQChip then panel.detailQChip:Hide() end
-  if panel.detailQLabel then panel.detailQLabel:Hide() end
-  if panel.detailText then panel.detailText:Hide() end
-  if panel.detailName then panel.detailName:SetText("") end
-  if panel.detailHint then panel.detailHint:Show() end
-  if panel.detailBody then panel.detailBody:SetHeight(40) end
-  if panel.detailScroll then panel.detailScroll:SetVerticalScroll(0); panel.detailScroll:UpdateScrollChildRect() end
 end
 
 function Dashboard.OpenTab(key)
@@ -957,42 +187,14 @@ function Dashboard.OpenSettings()
   Dashboard.ShowMainTab("settings")
 end
 
--- Default copy for the settings tips pane (shown until a setting is hovered).
-local DEFAULT_SETTING_TIP =
-  L["Hover any option on the left and its explanation appears here.\n\nEverything in Settings is saved automatically — there's no apply button."]
-
---- Populate the Settings tips pane. With a title, shows a chip + gold name + body for
---- the focused setting; with no title, shows just the default body from the top.
---- @param title string|nil Setting name.
---- @param body string Explanation text.
---- @param icon string|number|nil Icon art for the chip (defaults to a gear).
-function Dashboard.SetSettingTip(title, body, icon)
-  if not (panel and panel.settingsTip) then return end
-  if title and title ~= "" then
-    Theme.ApplyIcon(panel.settingsTipChip.icon, icon or Theme.I_GEAR)
-    panel.settingsTipChip:Show()
-    panel.settingsTipName:SetText(title); panel.settingsTipName:Show()
-    panel.settingsTipText:ClearAllPoints()
-    panel.settingsTipText:SetPoint("TOPLEFT", panel.settingsTipChip, "BOTTOMLEFT", 0, -14)
-  else
-    panel.settingsTipChip:Hide(); panel.settingsTipName:Hide()
-    panel.settingsTipText:ClearAllPoints()
-    panel.settingsTipText:SetPoint("TOPLEFT", panel.settingsTip, "TOPLEFT", 0, -42)
-  end
-  panel.settingsTipText:SetText(body or "")
-end
-
---- Restore the tips pane to its neutral default (no setting focused).
-function Dashboard.ResetSettingTip() Dashboard.SetSettingTip(nil, DEFAULT_SETTING_TIP) end
-
 --- Switch the top-level view between the dashboard and the settings page.
 --- @param key string "dashboard" | "settings"
 function Dashboard.ShowMainTab(key)
   if key ~= "settings" then key = "dashboard" end
   activeMainTab = key
   ns.chardb.lastMainTab = key
-  for _, b in ipairs(mainTabButtons) do setMainTabActive(b, b.key == key) end
-  if key == "settings" then Dashboard.ResetSettingTip() end
+  ns.UI.Nav.HighlightMainTab(key)
+  if key == "settings" then ns.UI.SettingsView.ResetSettingTip() end
   Dashboard.Refresh()
 end
 
@@ -1014,103 +216,76 @@ function Dashboard.Select(key)
   end
   host:SetVerticalScroll(0)
   if desc.detail then
-    Dashboard.ClearDetail()
-    Widgets.StyleHeader(panel.detailHdr, desc.detailTitle or L["Item Details"], DETAIL_W)
-    panel.detailHint:SetText(desc.detailHint or L["Hover an item to preview it here."])
+    ns.UI.DetailPane.Clear()
+    ns.UI.DetailPane.SetHeader(desc.detailTitle, desc.detailHint)
   end
   if desc.onShow then desc.onShow() end
-  for _, b in ipairs(navButtons) do setNavActive(b, b.key == desc.key) end
+  ns.UI.Nav.HighlightPage(desc.key)
   Dashboard.Refresh()
 end
 
 -- ---------------------------------------------------------------------------
--- Refresh
+-- Refresh — fan the current context out to whichever view is showing
 -- ---------------------------------------------------------------------------
 function Dashboard.Refresh()
   if not panel then return end
   local snap, verdict = getContext()
-  updateHeader(snap, verdict)
-  notifyTransitions(snap, verdict)
+  ns.UI.Header.Update(snap, verdict)
+  ns.UI.Presence.Notify(snap, verdict)
 
   local r, g, b = S.classColor(snap.cls)
 
   if activeMainTab == "settings" then
     -- SETTINGS tab: hide the dashboard view; show the settings column + its tips pane.
-    nav:Hide(); host:Hide(); panel.navDiv:Hide()
-    panel.detail:Hide(); panel.detailDiv:Hide()
+    ns.UI.Nav.SetShown(false); host:Hide()
+    ns.UI.DetailPane.SetShown(false)
     for _, d in ipairs(pages) do if d.frame then d.frame:Hide() end end
-    showCompact(compact, false)
+    ns.UI.Compact.SetShown(false)
     panel.collapseBtn:Hide()          -- compact mode doesn't apply to settings
     panel:SetWidth(WIDTH_EXPANDED)    -- always full size, even if the dashboard was collapsed
     panel:SetHeight(PANEL_H_EXPANDED)
-    panel.settingsTip:Show(); panel.settingsTipDiv:Show()
-    settingsHost:Show(); settingsHost:SetWidth(settingsScrollWidth())
-    -- Guard against re-entrancy while building: a widget's setup (e.g. a slider's
-    -- initial SetValue) can fire a callback that calls Refresh() again before
-    -- settingsFrame is assigned, which would re-build and recurse until the stack
-    -- overflows. Skip this Refresh if a build is already in flight.
-    if not settingsFrame and not Dashboard._buildingSettings and ns.UI.SettingsTab then
-      Dashboard._buildingSettings = true
-      settingsFrame = ns.UI.SettingsTab.build(settingsHost)
-      settingsHost:SetScrollChild(settingsFrame)
-      Dashboard._buildingSettings = false
-    end
-    if settingsFrame then
-      settingsFrame:Show()
-      if ns.UI.SettingsTab.refresh then
-        ns.UI.SettingsTab.refresh(settingsFrame, { snap = snap, verdict = verdict, width = settingsScrollWidth(), r = r, g = g, b = b })
-      end
-      settingsHost:UpdateScrollChildRect()
-    end
-    local ssb = settingsHost.ScrollBar
-    if ssb then ssb:SetShown((settingsHost:GetVerticalScrollRange() or 0) > 1) end
+    ns.UI.SettingsView.Refresh({ snap = snap, verdict = verdict, r = r, g = g, b = b })
     panel:SetShown(shouldShow)
     return
   end
 
   -- DASHBOARD tab: settings hidden, collapse affordance available again.
-  settingsHost:Hide()
-  panel.settingsTip:Hide(); panel.settingsTipDiv:Hide()
+  ns.UI.SettingsView.Hide()
   panel.collapseBtn:Show()
 
   if not ns.db.expanded then
     -- COMPACT
-    nav:Hide(); host:Hide(); panel.navDiv:Hide()
+    ns.UI.Nav.SetShown(false); host:Hide()
     for _, d in ipairs(pages) do if d.frame then d.frame:Hide() end end
-    showCompact(compact, true)
+    ns.UI.Compact.SetShown(true)
     panel:SetWidth(WIDTH_COMPACT)
-    local h = layoutCompact(compact, snap, r, g, b)
+    local h = ns.UI.Compact.Layout(snap, r, g, b)
     panel:SetHeight(CONTENT_TOP + h)
     panel:SetShown(shouldShow)
     return
   end
 
   -- EXPANDED (tabbed) — FIXED window size, content scrolls
-  showCompact(compact, false)
-  nav:Show(); host:Show(); panel.navDiv:Show()
+  ns.UI.Compact.SetShown(false)
+  ns.UI.Nav.SetShown(true); host:Show()
   panel:SetWidth(WIDTH_EXPANDED)
   panel:SetHeight(PANEL_H_EXPANDED)
 
   local desc = pagesByKey[activeKey] or pages[1]
   local detailOn = desc and desc.detail or false
-  panel.detail:SetShown(detailOn)
-  panel.detailDiv:SetShown(detailOn)
-  host:SetWidth(scrollWidth(detailOn))
+  ns.UI.DetailPane.SetShown(detailOn)
+  host:SetWidth(Layout.scrollWidth(detailOn))
 
   if desc then
     if not desc.frame and desc.build then desc.frame = desc.build(host) end
     if desc.frame then
       if host:GetScrollChild() ~= desc.frame then host:SetScrollChild(desc.frame) end
       desc.frame:Show()
-      if desc.refresh then desc.refresh(desc.frame, { snap = snap, verdict = verdict, width = scrollWidth(detailOn), r = r, g = g, b = b }) end
+      if desc.refresh then desc.refresh(desc.frame, { snap = snap, verdict = verdict, width = Layout.scrollWidth(detailOn), r = r, g = g, b = b }) end
       host:UpdateScrollChildRect()
     end
   end
-  if detailOn then
-    if panel._detailAchv then renderAchvDetail()
-    elseif panel._detailQuest then renderQuestDetail()
-    elseif panel._detailID then renderItemDetail() end
-  end
+  if detailOn then ns.UI.DetailPane.Rerender() end
   -- Hide the scrollbar entirely when the page fits (no stray arrows).
   local sb = host.ScrollBar
   if sb then sb:SetShown((host:GetVerticalScrollRange() or 0) > 1) end

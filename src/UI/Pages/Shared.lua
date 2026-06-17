@@ -446,7 +446,7 @@ end
 --
 -- opts.show(key, payload, mode)  render a row's detail. mode is "preview" (hover),
 --                                "lock" (click) or "restore" (revert after leave).
--- opts.clear()                   restore the empty/hint pane (default Dashboard.ClearDetail).
+-- opts.clear()                   restore the empty/hint pane (default DetailPane.Clear).
 -- opts.onLock()                  run after a click changes the lock, e.g. to repaint
 --                                the selected-row highlight (default Dashboard.Refresh).
 -- opts.revertDelay               seconds before restoring on leave (default 0.05).
@@ -457,7 +457,7 @@ end
 function S.makePinController(opts)
   opts = opts or {}
   local show = opts.show
-  local clear = opts.clear or function() if ns.Dashboard and ns.Dashboard.ClearDetail then ns.Dashboard.ClearDetail() end end
+  local clear = opts.clear or function() if ns.UI.DetailPane and ns.UI.DetailPane.Clear then ns.UI.DetailPane.Clear() end end
   local onLock = opts.onLock or function() if ns.Dashboard and ns.Dashboard.Refresh then ns.Dashboard.Refresh() end end
   local revertDelay = opts.revertDelay or 0.05
 

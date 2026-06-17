@@ -15,6 +15,10 @@ local Theme = ns.UI.Theme
 local Widgets = ns.UI.Widgets
 local L = ns.L
 
+ns.Pages = ns.Pages or {}
+local M = {}
+ns.Pages.Partners = M
+
 local COL_W   = 560          -- max content (left/roster) column width
 local CARD_H  = 72
 local ROW_H, ROW_GAP = 38, 6

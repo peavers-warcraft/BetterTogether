@@ -10,6 +10,10 @@ local Widgets = ns.UI.Widgets
 local Row = ns.UI.Row
 local L = ns.L
 
+ns.Pages = ns.Pages or {}
+local M = {}
+ns.Pages.Overview = M
+
 local MODEL_W, MODEL_H = 280, 420
 local ROW_GAP, COL_GAP = 6, 30
 

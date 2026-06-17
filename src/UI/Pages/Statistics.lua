@@ -11,6 +11,10 @@ local Widgets = ns.UI.Widgets
 local Row = ns.UI.Row
 local L = ns.L
 
+ns.Pages = ns.Pages or {}
+local M = {}
+ns.Pages.Statistics = M
+
 local SECTION_GAP = Theme.SECTION_GAP
 local TILE_H = 116
 local COL_GUTTER = 28

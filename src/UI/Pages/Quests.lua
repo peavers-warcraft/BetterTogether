@@ -8,7 +8,12 @@
 local addonName, ns = ...
 local S = ns.UI.Shared
 local Theme = ns.UI.Theme
+local DP = ns.UI.DetailPane
 local L = ns.L
+
+ns.Pages = ns.Pages or {}
+local M = {}
+ns.Pages.Quests = M
 
 -- Partner list carries no titles (kept off the wire); resolve from the client.
 local function resolveTitle(id, fallback)
@@ -25,12 +30,75 @@ local function progStr(q)
   return L["in progress"]
 end
 
+-- Quest detail renderer: draws a quest's status + objectives into the shared detail
+-- pane (ns.UI.DetailPane), reusing its chip/name/body widgets. `q` =
+-- { id, title, status, you, partner } where you/partner are { done, cur, total } (or
+-- nil if that side isn't on it).
+local shownQuest
+
+local function renderQuestDetail()
+  local q = shownQuest
+  if not q then return end
+  DP.StopSpinner()
+  DP.text:SetJustifyH("LEFT")
+  DP.hint:Hide()
+  Theme.ApplyIcon(DP.chip.icon, Theme.I_QUEST)
+  DP.chip:Show()
+  DP.name:SetText(q.title or (L["Quest #"] .. (q.id or 0)))
+  DP.name:SetTextColor(Theme.CREAM[1], Theme.CREAM[2], Theme.CREAM[3])
+
+  local function prog(side)
+    if not side then return Theme.C.dim .. L["not on this quest"] .. "|r" end
+    if side.done then return Theme.C.ready .. L["Complete"] .. "|r" end
+    if (side.total or 0) > 0 then return Theme.C.white .. (side.cur or 0) .. " / " .. side.total .. "|r" end
+    return Theme.C.white .. L["In progress"] .. "|r"
+  end
+
+  local parts = {}
+  local statusText = ({
+    both        = Theme.C.ready .. L["You're both on this quest."] .. "|r",
+    partnerOnly = Theme.C.warn .. string.format(L["Only %s is on this quest."], ns.Util.PartnerName(L["your partner"])) .. "|r",
+    youOnly     = Theme.C.info .. L["Only you are on this quest."] .. "|r",
+  })[q.status]
+  if statusText then parts[#parts + 1] = statusText end
+  parts[#parts + 1] = Theme.C.muted .. L["Quest ID"] .. "|r  " .. (q.id or 0)
+  parts[#parts + 1] = " "
+
+  -- Your side: real per-objective text when we're actually on the quest; else the
+  -- synced aggregate.
+  parts[#parts + 1] = Theme.C.gold .. L["Your progress"] .. "|r"
+  local objs = C_QuestLog and C_QuestLog.GetQuestObjectives
+    and C_QuestLog.GetQuestObjectives(q.id) or nil
+  if objs and #objs > 0 then
+    for _, o in ipairs(objs) do
+      parts[#parts + 1] = (o.finished and Theme.C.ready or Theme.C.soft) .. (o.text or "") .. "|r"
+    end
+  else
+    parts[#parts + 1] = prog(q.you)
+  end
+  parts[#parts + 1] = " "
+  parts[#parts + 1] = Theme.C.gold .. string.format(L["%s's progress"], ns.Util.PartnerName(L["Partner"])) .. "|r"
+  parts[#parts + 1] = prog(q.partner)
+
+  DP.qchip:Hide(); DP.qlabel:Hide()
+  DP.text:ClearAllPoints()
+  DP.text:SetPoint("TOPLEFT", DP.body, "TOPLEFT", 2, -60)
+  DP.text:SetText(table.concat(parts, "\n"))
+  DP.text:Show()
+
+  DP.body:SetHeight(60 + (DP.text:GetStringHeight() or 0) + 14)
+  if DP.scroll then DP.scroll:UpdateScrollChildRect() end
+end
+
+local function showQuestDetail(q)
+  shownQuest = q
+  DP.Render(renderQuestDetail)
+end
+
 -- Hover-preview + click-lock detail controller (S.makePinController): hovering a
 -- quest previews it in the right-hand pane, clicking locks it there.
 local detail = S.makePinController({
-  show = function(_, q)
-    if ns.Dashboard and ns.Dashboard.ShowQuestDetail then ns.Dashboard.ShowQuestDetail(q) end
-  end,
+  show = function(_, q) showQuestDetail(q) end,
 })
 
 -- Build a hoverable/clickable row: hover previews, click pins this quest's details.

@@ -366,4 +366,21 @@ function Widgets.SubHeight(h)
   return 0
 end
 
+-- ---------------------------------------------------------------------------
+-- Slim + recolor a UIPanelScrollFrameTemplate scrollbar (thin gold thumb, no arrows).
+-- Shared by every scroll frame in the shell (page host, settings host, detail pane).
+-- ---------------------------------------------------------------------------
+--- @param sf table A UIPanelScrollFrameTemplate scroll frame.
+function Widgets.StyleScrollbar(sf)
+  local sb = sf and sf.ScrollBar
+  if not sb then return end
+  local up, down = sb.ScrollUpButton, sb.ScrollDownButton
+  for _, b in ipairs({ up, down }) do
+    if b then b:SetAlpha(0); b:SetSize(1, 1); b:EnableMouse(false); b:SetScript("OnShow", b.Hide); b:Hide() end
+  end
+  sb:SetWidth(8)
+  local thumb = sb.GetThumbTexture and sb:GetThumbTexture()
+  if thumb then thumb:SetColorTexture(GOLD[1], GOLD[2], GOLD[3], 0.5); thumb:SetWidth(6) end
+end
+
 return Widgets

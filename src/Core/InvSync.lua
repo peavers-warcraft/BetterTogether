@@ -94,8 +94,8 @@ function InvSync.StoreItemDetail(id, str)
   -- Free the Inventory page's single-in-flight detail gate so it can chase the next
   -- item the user has hovered (set by the page; absent until the tab is built).
   if InvSync.onDetailResolved then InvSync.onDetailResolved(id) end
-  if ns.Dashboard and ns.Dashboard.OnItemDetailArrived then
-    ns.Dashboard.OnItemDetailArrived(id, str)
+  if ns.Pages and ns.Pages.Inventory and ns.Pages.Inventory.OnItemDetailArrived then
+    ns.Pages.Inventory.OnItemDetailArrived(id, str)
   end
 end
 
