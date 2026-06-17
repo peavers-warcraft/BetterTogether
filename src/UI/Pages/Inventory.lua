@@ -111,7 +111,7 @@ local function getSections(snap)
   -- Checked before cached data: turning sharing off stops the feed but we may still
   -- hold their last bags, so the opt-out message must win over a stale list.
   if not ns.PartnerShares("inventory") then
-    return { fullPage = { text = "|cff808080" .. L["Your partner has turned off sharing their inventory."] .. "|r" } }
+    return { fullPage = { text = "|cff808080" .. string.format(L["%s has turned off sharing their inventory."], ns.Util.PartnerName(L["Your partner"])) .. "|r" } }
   end
 
   -- Not paired yet: prompt to pair rather than spin forever on bags that won't come.
@@ -122,7 +122,7 @@ local function getSections(snap)
   local inv = ns.state.partner.inv or {}
   if #inv == 0 then
     return { fullPage = { spinner = true,
-      text = "|cffd0d0d0" .. L["Waiting for your partner's bags…"] .. "|r\n|cff808080" .. L["A request is sent when you open this tab."] .. "|r" } }
+      text = "|cffd0d0d0" .. string.format(L["Waiting for %s's bags…"], ns.Util.PartnerName(L["your partner"])) .. "|r\n|cff808080" .. L["A request is sent when you open this tab."] .. "|r" } }
   end
 
   local groups = {}

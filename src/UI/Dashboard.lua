@@ -337,7 +337,7 @@ local function renderItemDetail()
     panel.detailText:SetJustifyH("CENTER")
     if sp then panel.detailText:SetPoint("TOP", sp, "BOTTOM", 0, -14)
     else panel.detailText:SetPoint("TOPLEFT", panel.detailBody, "TOPLEFT", 2, -60) end
-    panel.detailText:SetText(Theme.C.muted2 .. L["Loading partner's item details…"] .. "|r")
+    panel.detailText:SetText(Theme.C.muted2 .. string.format(L["Loading %s's item details…"], ns.Util.PartnerName(L["your partner"])) .. "|r")
     panel.detailText:Show()
     panel.detailBody:SetHeight(150)
     if panel.detailScroll then panel.detailScroll:SetVerticalScroll(0); panel.detailScroll:UpdateScrollChildRect() end
@@ -445,7 +445,7 @@ local function renderQuestDetail()
   local parts = {}
   local statusText = ({
     both        = Theme.C.ready .. L["You're both on this quest."] .. "|r",
-    partnerOnly = Theme.C.warn .. L["Only your partner is on this quest."] .. "|r",
+    partnerOnly = Theme.C.warn .. string.format(L["Only %s is on this quest."], ns.Util.PartnerName(L["your partner"])) .. "|r",
     youOnly     = Theme.C.info .. L["Only you are on this quest."] .. "|r",
   })[q.status]
   if statusText then parts[#parts + 1] = statusText end
@@ -465,7 +465,7 @@ local function renderQuestDetail()
     parts[#parts + 1] = prog(q.you)
   end
   parts[#parts + 1] = " "
-  parts[#parts + 1] = Theme.C.gold .. L["Partner progress"] .. "|r"
+  parts[#parts + 1] = Theme.C.gold .. string.format(L["%s's progress"], ns.Util.PartnerName(L["Partner"])) .. "|r"
   parts[#parts + 1] = prog(q.partner)
 
   panel.detailQChip:Hide(); panel.detailQLabel:Hide()
@@ -499,7 +499,7 @@ local function renderAchvDetail()
     parts[#parts + 1] = Theme.C.ready .. L["You both earned this the same day."] .. "|r"
   else
     local st = ({ youOnly = Theme.C.info .. L["Only you have earned this."] .. "|r",
-                  partnerOnly = Theme.C.warn .. L["Only your partner has earned this."] .. "|r" })[a.status]
+                  partnerOnly = Theme.C.warn .. string.format(L["Only %s has earned this."], ns.Util.PartnerName(L["your partner"])) .. "|r" })[a.status]
     if st then parts[#parts + 1] = st end
   end
   if (a.points or 0) > 0 then parts[#parts + 1] = Theme.C.gold .. a.points .. L[" points"] .. "|r" end
@@ -508,7 +508,7 @@ local function renderAchvDetail()
     parts[#parts + 1] = Theme.C.soft .. a.desc .. "|r"; parts[#parts + 1] = " "
   end
   parts[#parts + 1] = Theme.C.gold .. L["You"] .. "|r  " .. (a.youStr or (Theme.C.dim .. L["not earned"] .. "|r"))
-  parts[#parts + 1] = Theme.C.gold .. L["Partner"] .. "|r  " .. (a.partnerStr or (Theme.C.dim .. L["not earned"] .. "|r"))
+  parts[#parts + 1] = Theme.C.gold .. ns.Util.PartnerName(L["Partner"]) .. "|r  " .. (a.partnerStr or (Theme.C.dim .. L["not earned"] .. "|r"))
 
   panel.detailQChip:Hide(); panel.detailQLabel:Hide()
   panel.detailText:ClearAllPoints()

@@ -99,33 +99,53 @@ end
 -- Aura scanning (own player only — restriction-proof, spec §6.1)
 -- ---------------------------------------------------------------------------
 
+local GetTime = GetTime
+
 -- Returns true if a value came back "secret" (Midnight Secret Values, §9).
 -- We never do arithmetic/concat on secret values.
 local function isSecret(v)
   return type(issecretvalue) == "function" and issecretvalue(v)
 end
 
--- Scan the player's helpful auras once and return booleans for each category.
--- Uses AuraUtil.ForEachAura when available (modern, handles paging), else falls
--- back to a manual C_UnitAuras index loop.
+-- Seconds left on an aura, from its absolute (GetTime-based) expiration. Returns 0
+-- when the buff has no duration (expirationTime 0), is secret, or already lapsed —
+-- callers treat 0 as "active, but no countdown to show".
+local function auraRemaining(aura)
+  local exp = aura.expirationTime
+  if exp == nil or isSecret(exp) or exp == 0 then return 0 end
+  return math.max(0, exp - GetTime())
+end
+
+-- Scan the player's helpful auras once and return booleans for each category, plus
+-- the remaining seconds (<cat>Rem) of the matched buff so partners can show a live
+-- countdown. Uses AuraUtil.ForEachAura when available (modern, handles paging), else
+-- falls back to a manual C_UnitAuras index loop.
 function Consumables.ScanPlayer()
   local found = { flask = false, food = false, rune = false, wpnAura = false }
 
   local function consider(aura)
     if not aura then return end
+    local rem = auraRemaining(aura)
+    -- Record a category hit and keep the longest remaining we've seen for it (a
+    -- character can carry two matching auras; the longer one is the live buff).
+    local function hit(cat)
+      found[cat] = true
+      local key = cat .. "Rem"
+      if rem > (found[key] or 0) then found[key] = rem end
+    end
     local spellId = aura.spellId
     if spellId ~= nil and not isSecret(spellId) then
-      if Consumables.flask[spellId]   then found.flask = true end
-      if Consumables.food[spellId]    then found.food = true end
-      if Consumables.rune[spellId]    then found.rune = true end
-      if Consumables.wpnAura[spellId] then found.wpnAura = true end
+      if Consumables.flask[spellId]   then hit("flask") end
+      if Consumables.food[spellId]    then hit("food") end
+      if Consumables.rune[spellId]    then hit("rune") end
+      if Consumables.wpnAura[spellId] then hit("wpnAura") end
     end
     -- Tier-proof name fallback (see NAME_HINTS): only fill gaps the IDs missed.
     local name = aura.name
-    if type(name) == "string" and name ~= "" then
-      if not found.food  and nameMatches(name, NAME_HINTS.food)  then found.food  = true end
-      if not found.flask and nameMatches(name, NAME_HINTS.flask) then found.flask = true end
-      if not found.rune  and nameMatches(name, NAME_HINTS.rune)  then found.rune  = true end
+    if type(name) == "string" and not isSecret(name) and name ~= "" then
+      if not found.food  and nameMatches(name, NAME_HINTS.food)  then hit("food")  end
+      if not found.flask and nameMatches(name, NAME_HINTS.flask) then hit("flask") end
+      if not found.rune  and nameMatches(name, NAME_HINTS.rune)  then hit("rune")  end
     end
   end
 

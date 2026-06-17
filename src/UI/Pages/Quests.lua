@@ -51,7 +51,7 @@ local function getSections(snap)
   -- Checked before any cached data: a partner who turns sharing off stops sending
   -- QLOG but we may still hold their last list, so this must win over stale data.
   if not ns.PartnerShares("questlog") then
-    return { fullPage = { text = "|cff808080" .. L["Your partner has turned off sharing their quest log."] .. "|r" } }
+    return { fullPage = { text = "|cff808080" .. string.format(L["%s has turned off sharing their quest log."], ns.Util.PartnerName(L["Your partner"])) .. "|r" } }
   end
 
   -- Not paired yet: nothing to compare — a calm prompt rather than a spinner that
@@ -65,7 +65,7 @@ local function getSections(snap)
 
   if not partner then
     return { fullPage = { spinner = true,
-      text = "|cffd0d0d0" .. L["Waiting for your partner's quest log…"] .. "|r\n|cff808080" .. L["A request is sent when you open this tab."] .. "|r" } }
+      text = "|cffd0d0d0" .. string.format(L["Waiting for %s's quest log…"], ns.Util.PartnerName(L["your partner"])) .. "|r\n|cff808080" .. L["A request is sent when you open this tab."] .. "|r" } }
   end
 
   local ownById, partnerById = {}, {}
@@ -79,11 +79,11 @@ local function getSections(snap)
     if mine then
       local row = questRow(q.id, title, "both", mine, q)
       row.youText = "|cffffffff" .. L["You "] .. progStr(mine) .. "|r"
-      row.partnerText = "|cffa0a0a0" .. L["Partner "] .. progStr(q) .. "|r"
+      row.partnerText = "|cffa0a0a0" .. ns.Util.PartnerName(L["Partner"]) .. " " .. progStr(q) .. "|r"
       both[#both + 1] = row
     else
       local row = questRow(q.id, title, "partnerOnly", nil, q)
-      row.value = "|cffa0a0a0" .. L["Partner "] .. progStr(q) .. "|r"
+      row.value = "|cffa0a0a0" .. ns.Util.PartnerName(L["Partner"]) .. " " .. progStr(q) .. "|r"
       partnerOnly[#partnerOnly + 1] = row
     end
   end
@@ -104,10 +104,10 @@ local function getSections(snap)
       text = #both == 0 and "|cff808080" .. L["No quests in common right now."] .. "|r" or nil },
   }
   if #partnerOnly > 0 then
-    sections[#sections + 1] = { title = L["Partner is on, you're not"] .. "  |cff707070(" .. #partnerOnly .. ")|r", rows = partnerOnly }
+    sections[#sections + 1] = { title = string.format(L["%s is on, you're not"], ns.Util.PartnerName(L["Partner"])) .. "  |cff707070(" .. #partnerOnly .. ")|r", rows = partnerOnly }
   end
   if #youOnly > 0 then
-    sections[#sections + 1] = { title = L["You're on, partner's not"] .. "  |cff707070(" .. #youOnly .. ")|r", rows = youOnly }
+    sections[#sections + 1] = { title = string.format(L["You're on, %s isn't"], ns.Util.PartnerName(L["Partner"])) .. "  |cff707070(" .. #youOnly .. ")|r", rows = youOnly }
   end
   return sections
 end

@@ -362,7 +362,7 @@ local function refresh(f, ctx)
   -- so plainly instead of holding the "gathering…" note forever.
   if not ns.PartnerShares("achievements") then
     return fullPageNote(f, colW,
-      "|cff808080" .. L["Your partner has turned off sharing their achievements."] .. "|r")
+      "|cff808080" .. string.format(L["%s has turned off sharing their achievements."], ns.Util.PartnerName(L["Your partner"])) .. "|r")
   end
 
   viewEra = viewEra or defaultEra()
@@ -408,7 +408,10 @@ local function refresh(f, ctx)
       local c = ensureCard(f, ci)
       local m = fm.m
       c:Show(); c:SetWidth(colW)
-      c:ClearAllPoints(); c:SetPoint("TOPLEFT", f, "TOPLEFT", -1, -yOff)
+      -- Anchor flush at x=0: the card's gold backdrop border draws inside its bounds,
+      -- so a negative offset pushes the left border column outside the scroll frame's
+      -- clip region and shaves it off ("off screen on the left").
+      c:ClearAllPoints(); c:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -yOff)
       c.chip.icon:SetTexture(m.icon or Theme.I_BOSS); c.chip.icon:SetTexCoord(0.1, 0.9, 0.1, 0.9)
       c.tag:SetText(fm.tag)
       c.name:SetText(m.name); c.name:SetWidth(colW - 170)
@@ -430,11 +433,11 @@ local function refresh(f, ctx)
   end
   for i = ci + 1, #f.cards do f.cards[i]:Hide() end
 
-  -- ERA LIST (no header) — "Earned together" (capped to 10 most recent) +
-  -- "Partner earned"; the solo "You earned" bucket is intentionally omitted, since
-  -- this page is about the two of you. Era nav is rendered centered below the list.
+  -- ERA LIST (no header) — just "Earned together" (capped to 10 most recent). The
+  -- one-sided buckets ("You earned" / "Partner earned") are intentionally omitted:
+  -- this page is about the moments the two of you share. Era nav is centered below.
   yOff = yOff + SEC_GAP
-  local both, _, partnerOnly = eraSplit(viewEra)
+  local both = eraSplit(viewEra)
 
   local TOGETHER_CAP = 10
   local function section(title, list, kind, cap)
@@ -480,8 +483,7 @@ local function refresh(f, ctx)
     f.eraSpinner:Stop()
     local togCount = #both > TOGETHER_CAP and (TOGETHER_CAP .. L[" of "] .. #both) or tostring(#both)
     section(L["Earned together"] .. "  |cff707070(" .. togCount .. ")|r", both, "both", TOGETHER_CAP)
-    section(L["Partner earned"] .. "  |cff707070(" .. #partnerOnly .. ")|r", partnerOnly, "partner")
-    if #both == 0 and #partnerOnly == 0 then
+    if #both == 0 then
       f.note2:Show(); f.note2:ClearAllPoints(); f.note2:SetJustifyH("LEFT")
       f.note2:SetPoint("TOPLEFT", f, "TOPLEFT", 3, -yOff)
       f.note2:SetWidth(colW - 6)

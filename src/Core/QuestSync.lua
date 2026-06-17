@@ -25,7 +25,10 @@ function QuestSync.Scan()
     local info = C_QuestLog.GetInfo(i)
     if info and not info.isHeader and not info.isHidden and (info.questID or 0) > 0 then
       local id = info.questID
-      local done = (C_QuestLog.IsComplete and C_QuestLog.IsComplete(id)) and 1 or 0
+      -- Boolean (not 0/1): callers test `if q.done then`, and Lua treats 0 as
+      -- truthy — a numeric 0 would make every quest read as "done". The wire
+      -- encoder converts back to 1/0 (matching Decode's `done == "1"`).
+      local done = (C_QuestLog.IsComplete and C_QuestLog.IsComplete(id)) and true or false
       local cur, total = 0, 0
       local objs = C_QuestLog.GetQuestObjectives and C_QuestLog.GetQuestObjectives(id)
       if objs then
@@ -46,7 +49,7 @@ function QuestSync.Encode()
   local parts = {}
   for i = 1, math.min(#list, MAX_QUESTS) do
     local q = list[i]
-    parts[i] = q.id .. ":" .. q.done .. ":" .. q.cur .. "/" .. q.total
+    parts[i] = q.id .. ":" .. (q.done and 1 or 0) .. ":" .. q.cur .. "/" .. q.total
   end
   return table.concat(parts, ",")
 end

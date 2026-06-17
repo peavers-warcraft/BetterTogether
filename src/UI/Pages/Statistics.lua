@@ -110,7 +110,7 @@ local function build(host)
 end
 
 local function compareVal(you, partner)
-  return "|cffffffff" .. L["You "] .. fmtNum(you) .. "|r    |cffa0a0a0" .. L["Partner "] .. fmtNum(partner) ..
+  return "|cffffffff" .. L["You "] .. fmtNum(you) .. "|r    |cffa0a0a0" .. ns.Util.PartnerName(L["Partner"]) .. " " .. fmtNum(partner) ..
     "|r    |cff44ff44" .. L["Total "] .. fmtNum((you or 0) + (partner or 0)) .. "|r"
 end
 
@@ -159,7 +159,7 @@ local function refresh(f, ctx)
 
   -- LEFT: You vs Partner
   f.cHeader.label:ClearAllPoints(); f.cHeader.label:SetPoint("TOPLEFT", tileAnchor, "BOTTOMLEFT", 3, -SECTION_GAP)
-  Widgets.StyleHeader(f.cHeader, L["You vs Partner"], leftW)
+  Widgets.StyleHeader(f.cHeader, string.format(L["You vs %s"], ns.Util.PartnerName(L["Partner"])), leftW)
   -- When the partner isn't sharing stats, their counters arrive as zero; label that
   -- side "hidden" instead of implying they've done nothing.
   local statsHidden = not ns.PartnerShares("stats")
@@ -167,7 +167,7 @@ local function refresh(f, ctx)
     local r = f.cRows[i]
     r:SetIcon(def.icon)
     if statsHidden then
-      r:Set(def.label, "|cffffffff" .. L["You "] .. fmtNum(own[def.key]) .. "|r    |cff808080" .. L["Partner hidden"] .. "|r")
+      r:Set(def.label, "|cffffffff" .. L["You "] .. fmtNum(own[def.key]) .. "|r    |cff808080" .. string.format(L["%s hidden"], ns.Util.PartnerName(L["Partner"])) .. "|r")
     else
       r:Set(def.label, compareVal(own[def.key], partner[def.key]))
     end

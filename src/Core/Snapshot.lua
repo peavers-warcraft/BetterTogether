@@ -39,12 +39,20 @@ function Snapshot.Encode()
   -- its default on the partner's side, so dropping one never corrupts the rest.
   local parts = {}
   local function add(key, str) if ns.Shares(key) then parts[#parts + 1] = str end end
+  -- An active buff with a known duration also emits "<key>t=<seconds>" so the
+  -- partner can show a live countdown; omitted when off or duration-less (older
+  -- clients simply ignore the extra field, and a missing one decodes to 0).
+  local function buff(key, on, rem)
+    local str = key .. "=" .. b(on)
+    if on and rem and rem > 0 then str = str .. "|" .. key .. "t=" .. math.floor(rem) end
+    return str
+  end
   add("durability", "dur="   .. (s.dur or 100))
   add("bags",       "bags="  .. (s.bags or 0))
-  add("flask",      "flask=" .. b(s.flask))
-  add("food",       "food="  .. b(s.food))
-  add("wpn",        "wpn="   .. b(s.wpn))
-  add("rune",       "rune="  .. b(s.rune))
+  add("flask",      buff("flask", s.flask, s.flaskr))
+  add("food",       buff("food",  s.food,  s.foodr))
+  add("wpn",        buff("wpn",   s.wpn,   s.wpnr))
+  add("rune",       buff("rune",  s.rune,  s.runer))
   add("hp",         "hp="    .. b(s.hp))
   if ns.Shares("quest") then
     -- qname must not contain our delimiters; strip pipes/carets defensively, then
@@ -88,6 +96,12 @@ function Snapshot.Decode(payload)
     food   = bool("food"),
     wpn    = bool("wpn"),
     rune   = bool("rune"),
+    -- Remaining seconds per buff (0 when absent / duration-less); always present so
+    -- a fresh SNAP overwrites a stale countdown on the partner table.
+    flaskr = num("flaskt", 0),
+    foodr  = num("foodt", 0),
+    wpnr   = num("wpnt", 0),
+    runer  = num("runet", 0),
     hp     = bool("hp"),
     qid    = num("qid", 0),
     qcur   = qcur,

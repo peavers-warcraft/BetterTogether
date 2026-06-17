@@ -21,6 +21,12 @@ local function safe(fn, fallback)
   return fallback
 end
 
+-- Midnight "Secret Values" (§9) taint on any arithmetic/relational use, so we must
+-- check before doing maths on a value that the client may hand back protected.
+local function isSecret(v)
+  return type(issecretvalue) == "function" and issecretvalue(v)
+end
+
 -- ---------------------------------------------------------------------------
 -- Durability: weakest slot %, which slot, and how many are below threshold
 -- ---------------------------------------------------------------------------
@@ -58,10 +64,18 @@ local function readBagSpace()
   return free
 end
 
+-- Returns hasMainHandEnchant + its remaining seconds (temporary enchants like oils
+-- report a millisecond expiration; permanent enchants report none -> 0). The
+-- expiration can come back as a secret value out of combat, so guard before any
+-- maths on it (an unguarded comparison would error and abort the whole recompute).
 local function readWeaponEnchant()
-  if not GetWeaponEnchantInfo then return false end
-  local hasMain = GetWeaponEnchantInfo()
-  return hasMain == true
+  if not GetWeaponEnchantInfo then return false, 0 end
+  local hasMain, mainExpMs = GetWeaponEnchantInfo()
+  local rem = 0
+  if hasMain == true and mainExpMs ~= nil and not isSecret(mainExpMs) and mainExpMs > 0 then
+    rem = mainExpMs / 1000
+  end
+  return hasMain == true, rem
 end
 
 -- ---------------------------------------------------------------------------
@@ -246,10 +260,17 @@ function SelfState.Update()
   local q = readQuest()
   s.dur, s.durSlot, s.durLowN = readDurability()
   s.bags  = readBagSpace()
+  local hasWpn, wpnRem = readWeaponEnchant()
   s.flask = cons.flask
   s.food  = cons.food
   s.rune  = cons.rune
-  s.wpn   = readWeaponEnchant() or cons.wpnAura
+  s.wpn   = hasWpn or cons.wpnAura
+  -- Remaining seconds per buff (0 = active but no countdown to show), sent so the
+  -- partner can tick it down between syncs. Weapon time prefers the real enchant.
+  s.flaskr = math.floor(cons.flaskRem or 0)
+  s.foodr  = math.floor(cons.foodRem or 0)
+  s.runer  = math.floor(cons.runeRem or 0)
+  s.wpnr   = math.floor((hasWpn and wpnRem) or (cons.wpnAura and cons.wpnAuraRem) or 0)
   s.hp    = readFullHP()
   s.qid, s.qname, s.qcur, s.qtotal, s.qpct = q.qid, q.qname, q.qcur, q.qtotal, q.qpct
 

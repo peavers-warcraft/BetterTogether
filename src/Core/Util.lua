@@ -46,6 +46,20 @@ function Util.IsSelf(name)
   return name ~= nil and Util.ShortName(name) == UnitName("player")
 end
 
+--- The bonded partner's short display name for weaving into user-facing strings, or
+--- the supplied generic fallback when no partner is bonded. Keyed off the saved active
+--- bond (not the transient ns.state.partnerName, which holds the "not paired" placeholder
+--- when unlinked), so it stays right in offline/unpaired states. The result is a plain
+--- string, so call sites feed it straight into string.format(L["… %s …"], …) and keep
+--- translations working — pass the fallback that fits the surrounding grammar
+--- ("your partner" mid-sentence, "Partner" as a standalone label).
+--- @param fallback string|nil Word to use when no partner is bonded (defaults to "partner").
+--- @return string
+function Util.PartnerName(fallback)
+  local bonded = ns.Pairing and ns.Pairing.PartnerName()
+  return (bonded and Util.ShortName(bonded)) or fallback or "partner"
+end
+
 --- Truncate `s` to at most `n` characters, appending an ellipsis when shortened.
 --- Byte-length based, which is fine for the short labels we put on the wire and
 --- keeps every truncation in the addon (SNAP qname, CARD key/zone, quest titles)

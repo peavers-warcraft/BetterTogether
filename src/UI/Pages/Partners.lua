@@ -15,11 +15,26 @@ local Theme = ns.UI.Theme
 local Widgets = ns.UI.Widgets
 local L = ns.L
 
-local COL_W   = 560          -- max content column width
+local COL_W   = 560          -- max content (left/roster) column width
 local CARD_H  = 72
 local ROW_H, ROW_GAP = 38, 6
 local SECTION_GAP = 30
 local HEAD_PAD = 10          -- top padding between a section header's rule and the text below it
+
+-- Right-hand "how it works" guide. Shown beside the roster when the host is wide
+-- enough (it isn't a separate detail pane — it rides inside the page frame), so the
+-- tab no longer leaves a big empty gutter on the right.
+local GUIDE_GUTTER = 32      -- space between the roster column and the guide
+local GUIDE_MIN_W  = 300     -- below this the guide is dropped (narrow / scaled-down panel)
+local STEP_BADGE   = 30      -- numbered circle diameter
+local GUIDE_STEPS = {
+  { "Invite a partner",
+    "Type a name in the box at left and hit Invite — no group needed. They get a popup to accept." },
+  { "Keep one active bond",
+    "You sync with one partner at a time. Switch to anyone in your saved roster with a single click." },
+  { "Stay in sync, live",
+    "While you're both online, readiness, gear, quests and more update on their own — nothing to compare by hand." },
+}
 
 -- Captured once (matches the working pattern in Overview.lua). Pass explicit ""
 -- flags: FontString:SetFont treats flags as optional, but EditBox:SetFont
@@ -224,6 +239,28 @@ local function makeRow(parent)
 end
 
 -- ---------------------------------------------------------------------------
+-- "How bonds work" guide step — a numbered chip + title + wrapped description.
+-- The chip is a Widgets.Chip with no icon (just the gold rim + dark fill), used
+-- here as a number badge so the steps read as an ordered list.
+-- ---------------------------------------------------------------------------
+local function makeStep(parent)
+  local s = {}
+  s.badge = Widgets.Chip(parent, STEP_BADGE)
+  s.num = s.badge:CreateFontString(nil, "OVERLAY")
+  s.num:SetPoint("CENTER", s.badge, "CENTER", 0, 0); setFont(s.num, 15)
+  s.num:SetTextColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3])
+
+  s.title = parent:CreateFontString(nil, "OVERLAY")
+  setFont(s.title, 15); s.title:SetJustifyH("LEFT")
+  s.title:SetTextColor(Theme.CREAM[1], Theme.CREAM[2], Theme.CREAM[3])
+
+  s.desc = parent:CreateFontString(nil, "OVERLAY")
+  setFont(s.desc, 13); s.desc:SetJustifyH("LEFT"); s.desc:SetJustifyV("TOP"); s.desc:SetSpacing(3)
+  s.desc:SetTextColor(0.74, 0.71, 0.62)
+  return s
+end
+
+-- ---------------------------------------------------------------------------
 -- Page
 -- ---------------------------------------------------------------------------
 local function build(host)
@@ -238,6 +275,16 @@ local function build(host)
   f.savedEmpty:SetText(L["No other saved partners. Invite someone below to keep them on hand."])
 
   f.hAdd = Widgets.SectionHeader(f)   -- "Add a partner" description rides on the header's sub-text
+
+  -- Right-hand guide column (filled in by refresh when the panel is wide enough).
+  f.gHeader = Widgets.SectionHeader(f)
+  f.guide = CreateFrame("Frame", nil, f, "BackdropTemplate")
+  f.guide:SetBackdrop(Theme.BACKDROP_HAIRLINE)
+  f.guide:SetBackdropColor(0.09, 0.095, 0.12, 0.7)
+  f.guide:SetBackdropBorderColor(Theme.GOLD[1] * 0.5, Theme.GOLD[2] * 0.5, Theme.GOLD[3] * 0.5, 0.5)
+  f.steps = {}
+  for i = 1, #GUIDE_STEPS do f.steps[i] = makeStep(f.guide) end
+  f.guideFoot = Widgets.SubText(f)
 
   local box = Widgets.Input(f, 190, 26)
   local acOn = enableNameAutocomplete(box)
@@ -291,6 +338,13 @@ local function refresh(f, ctx)
     h.label:ClearAllPoints()
     h.label:SetPoint("TOPLEFT", f, "TOPLEFT", 0, y)
     Widgets.StyleHeader(h, title, W, subtext)
+    return y - 30 - Widgets.SubHeight(h)
+  end
+  -- Same, but at an explicit x/column-width (the right-hand guide column).
+  local function placeHeaderAt(h, title, x, y, colW)
+    h.label:ClearAllPoints()
+    h.label:SetPoint("TOPLEFT", f, "TOPLEFT", x, y)
+    Widgets.StyleHeader(h, title, colW)
     return y - 30 - Widgets.SubHeight(h)
   end
 
@@ -354,7 +408,47 @@ local function refresh(f, ctx)
   f.inviteBtn:SetPoint("LEFT", f.inviteBox, "RIGHT", 10, 0)
   y = y - 40
 
-  local h = -y + 10
+  -- 4) Right column: "How bonds work" guide -------------------------------
+  -- Fills the space beside the roster instead of leaving a blank gutter. Dropped
+  -- on a narrow/scaled panel where the two columns wouldn't fit side by side.
+  local rightX = W + GUIDE_GUTTER
+  local rightW = ctx.width - rightX
+  local guideBottom = 0
+  if rightW >= GUIDE_MIN_W then
+    local gy = placeHeaderAt(f.gHeader, L["How bonds work"], rightX, 0, rightW)
+
+    f.guide:Show()
+    f.guide:ClearAllPoints()
+    f.guide:SetPoint("TOPLEFT", f, "TOPLEFT", rightX, gy - 4)
+    f.guide:SetWidth(rightW)
+
+    local PAD_C = 16
+    local textX = STEP_BADGE + 12
+    local textW = rightW - 2 * PAD_C - textX
+    local sy = PAD_C
+    for i, def in ipairs(GUIDE_STEPS) do
+      local s = f.steps[i]
+      s.badge:ClearAllPoints(); s.badge:SetPoint("TOPLEFT", f.guide, "TOPLEFT", PAD_C, -sy)
+      s.num:SetText(i)
+      s.title:ClearAllPoints(); s.title:SetPoint("TOPLEFT", f.guide, "TOPLEFT", PAD_C + textX, -sy - 2)
+      s.title:SetWidth(textW); s.title:SetText(def[1])
+      s.desc:ClearAllPoints(); s.desc:SetPoint("TOPLEFT", s.title, "BOTTOMLEFT", 0, -4)
+      s.desc:SetWidth(textW); s.desc:SetText(def[2])
+      local stepH = math.max(STEP_BADGE, s.title:GetStringHeight() + 4 + s.desc:GetStringHeight())
+      sy = sy + stepH + (i < #GUIDE_STEPS and 16 or 0)
+    end
+    local cardH = sy + PAD_C
+    f.guide:SetHeight(cardH)
+
+    f.guideFoot:Show(); f.guideFoot:ClearAllPoints()
+    f.guideFoot:SetPoint("TOPLEFT", f.guide, "BOTTOMLEFT", 0, -12); f.guideFoot:SetWidth(rightW)
+    f.guideFoot:SetText(L["A green dot marks a saved partner who's online and ready to link. Choose what you share on the Privacy tab."])
+    guideBottom = (gy - 4) - cardH - 12 - f.guideFoot:GetStringHeight()
+  else
+    Widgets.HideHeader(f.gHeader); f.guide:Hide(); f.guideFoot:Hide()
+  end
+
+  local h = -math.min(y, guideBottom) + 10
   f:SetHeight(h)
   return h
 end

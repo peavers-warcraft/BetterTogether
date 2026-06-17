@@ -65,13 +65,18 @@ function S.roleAtlas(role)
 end
 
 --- Which unit token is our partner (for the live 3D model)?
---- @return string|nil unit "player"/"partyN" or nil.
+--- @return string|nil unit "player"/"partyN"/"raidN" or nil.
 function S.partnerUnit()
   if ns.Comm and ns.Comm.selftest then return "player" end
   local name = ns.state.partnerName
   if not name then return nil end
-  for i = 1, 4 do
-    local u = "party" .. i
+  -- Scan the right token namespace: party1..4 don't exist inside a raid group, so a
+  -- raid partner would otherwise never resolve and the model would fall back to the
+  -- class icon. IsInRaid() picks raid1..40 there, plain party tokens otherwise.
+  local prefix, count = "party", 4
+  if IsInRaid() then prefix, count = "raid", 40 end
+  for i = 1, count do
+    local u = prefix .. i
     if UnitExists(u) and UnitName(u) == name then return u end
   end
   return nil
@@ -114,6 +119,23 @@ end
 -- ---------------------------------------------------------------------------
 -- Readiness row values
 -- ---------------------------------------------------------------------------
+--- Active-buff value with a live remaining-time readout. `remSec` is the seconds
+--- left sampled when the partner sent the SNAP; `snapAt` is when it arrived locally,
+--- so we subtract elapsed time and the value ticks down on the ~2s dashboard repaint.
+--- Falls back to a plain "active" when no duration was shared (older client / buff
+--- with no timer) or once our local countdown runs out before the next sync.
+--- @param active boolean Whether the buff is present.
+--- @param remSec number|nil Remaining seconds at snapshot time.
+--- @param snapAt number|nil Local GetTime() when the snapshot arrived.
+--- @return string
+local function buffValue(active, remSec, snapAt)
+  if not active then return L["missing"] end
+  if not remSec or remSec <= 0 or not snapAt then return L["active"] end
+  local left = remSec - (GetTime() - snapAt)
+  if left <= 0 then return L["active"] end
+  return S.fmtTime(left) .. L[" left"]
+end
+
 --- Populate a keyed table of readiness rows from a snapshot (respects db.show).
 --- @param rows table Map of rowKey -> Row object.
 --- @param snap table Partner snapshot.
@@ -132,10 +154,11 @@ function S.setRowValues(rows, snap)
   end
   local slot = snap.durSlot and ns.Snapshot.SLOT_NAMES[snap.durSlot]
   set("durability", L["Repairs"] .. (slot and (" |cff808080" .. slot .. "|r") or ""), (snap.dur or 0) .. "%", (snap.dur or 100) >= db.thresholds.durability)
-  set("flask", L["Flask"], snap.flask and L["active"] or L["missing"], snap.flask)
-  set("food", L["Food buff"], snap.food and L["active"] or L["missing"], snap.food)
-  set("wpn", L["Weapon oil"], snap.wpn and L["active"] or L["missing"], snap.wpn)
-  set("rune", L["Aug rune"], snap.rune and L["active"] or L["missing"], snap.rune)
+  local at = snap._snapAt
+  set("flask", L["Flask"], buffValue(snap.flask, snap.flaskr, at), snap.flask)
+  set("food", L["Food buff"], buffValue(snap.food, snap.foodr, at), snap.food)
+  set("wpn", L["Weapon oil"], buffValue(snap.wpn, snap.wpnr, at), snap.wpn)
+  set("rune", L["Aug rune"], buffValue(snap.rune, snap.runer, at), snap.rune)
   set("bags", L["Bag space"], (snap.bags or 0) .. L[" free"], (snap.bags or 0) > 0)
 end
 

@@ -79,8 +79,10 @@ local function refresh(f, ctx)
   if unit and UnitExists(unit) then
     f.model:Show(); f.modelFallback:Hide()
     if f.model.currentUnit ~= unit then
-      f.model.currentUnit = unit
-      pcall(function() f.model:SetUnit(unit); f.model.facing = 0.3; f.model:SetFacing(0.3) end)
+      -- Commit currentUnit only on success so a transient failure (partner model not
+      -- loaded / out of range yet) retries on the next refresh instead of sticking blank.
+      local ok = pcall(function() f.model:SetUnit(unit); f.model.facing = 0.3; f.model:SetFacing(0.3) end)
+      if ok then f.model.currentUnit = unit end
     end
   else
     f.model.currentUnit = nil; f.model:Hide()

@@ -459,6 +459,10 @@ local function dispatch(text, senderShort, trusted)
     if snap then
       ns.state.partner = ns.state.partner or {}
       for k, v in pairs(snap) do ns.state.partner[k] = v end
+      -- Anchor for the buff countdowns: remaining seconds in the SNAP were sampled
+      -- when it was sent, so we tick them down from local arrival time. SNAP-only
+      -- (not lastSeen, which CARD/HELLO also bump) keeps the countdown honest.
+      ns.state.partner._snapAt = GetTime()
       markLinked()
       if ns.Dashboard then ns.Dashboard.Refresh() end
     end
