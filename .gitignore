@@ -1,11 +1,7 @@
 .idea
 *.iml
-/.luarc.json
 .DS_Store
 
-# Lint tooling: binaries are fetched on demand (tools/lint.ps1, tools/lsp-check.ps1)
-/tools/bin/
-# Generated from an in-game /btdump; regenerate locally, not committed
-/tools/wow-globals.lua
-/tools/luals/
-/tools/luals-report.txt
+# Transient validation artifacts (luacheck/LuaLS runners + CI). See ../wow-api.
+.validate/
+.luals-log/
