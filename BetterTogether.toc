@@ -34,6 +34,7 @@ src\Core\Comm.lua
 src\UI\Theme.lua
 src\UI\Widgets.lua
 src\UI\Row.lua
+src\UI\Toast.lua
 src\UI\Pages\Shared.lua
 src\UI\Dashboard.lua
 src\UI\Pages\Overview.lua

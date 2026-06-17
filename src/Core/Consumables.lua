@@ -6,10 +6,11 @@
   a single shared buff spellID across ranks, so a small table covers a whole tier.
 
   [VERIFY IN-CLIENT] (spec §11.4): the spellIDs below are placeholders / known
-  values from prior tiers and MUST be confirmed for the current Midnight 12.0
-  tier in-client. Use `/dump C_UnitAuras.GetAuraDataByIndex("player", i)` while a
-  buff is active to read the live spellId, then add it here. The detection logic
-  is complete and correct; only the numbers need verifying.
+  values from prior tiers and SHOULD be confirmed for the current Midnight 12.0
+  tier in-client. Run `/bt auras` with a flask/food/rune active to read the live
+  spellIds, then add them here. Pinned IDs are the precise path — but detection no
+  longer depends on them: ScanPlayer also matches the stable buff *names* (NAME_HINTS
+  below), so flask/food/rune are caught out of the box even before the IDs are pinned.
 ]]
 
 local addonName, ns = ...
@@ -56,6 +57,24 @@ local WEAPON_AURA_IDS = {
   -- TODO[VERIFY IN-CLIENT]: weapon buff aura spellIDs if any apply as player auras.
 }
 
+-- Name-substring fallback. The spellID sets above are precise but go stale every
+-- patch (Blizzard re-IDs consumables); the buff *names* are far more stable. When
+-- an aura's id isn't in our sets we still catch the common cases by name, so a
+-- fresh tier keeps working before anyone updates the numbers. enUS-oriented — non-
+-- English clients fall back to the ID sets (and can extend via Consumables.Add).
+local NAME_HINTS = {
+  food  = { "Well Fed" },
+  flask = { "Flask", "Phial" },
+  rune  = { "Augment Rune", "Augmented" },
+}
+
+local function nameMatches(name, hints)
+  for _, h in ipairs(hints) do
+    if name:find(h, 1, true) then return true end   -- plain (non-pattern) substring
+  end
+  return false
+end
+
 -- ---------------------------------------------------------------------------
 -- Build lookup sets
 -- ---------------------------------------------------------------------------
@@ -95,11 +114,19 @@ function Consumables.ScanPlayer()
   local function consider(aura)
     if not aura then return end
     local spellId = aura.spellId
-    if spellId == nil or isSecret(spellId) then return end
-    if Consumables.flask[spellId]   then found.flask = true end
-    if Consumables.food[spellId]    then found.food = true end
-    if Consumables.rune[spellId]    then found.rune = true end
-    if Consumables.wpnAura[spellId] then found.wpnAura = true end
+    if spellId ~= nil and not isSecret(spellId) then
+      if Consumables.flask[spellId]   then found.flask = true end
+      if Consumables.food[spellId]    then found.food = true end
+      if Consumables.rune[spellId]    then found.rune = true end
+      if Consumables.wpnAura[spellId] then found.wpnAura = true end
+    end
+    -- Tier-proof name fallback (see NAME_HINTS): only fill gaps the IDs missed.
+    local name = aura.name
+    if type(name) == "string" and name ~= "" then
+      if not found.food  and nameMatches(name, NAME_HINTS.food)  then found.food  = true end
+      if not found.flask and nameMatches(name, NAME_HINTS.flask) then found.flask = true end
+      if not found.rune  and nameMatches(name, NAME_HINTS.rune)  then found.rune  = true end
+    end
   end
 
   if AuraUtil and AuraUtil.ForEachAura then

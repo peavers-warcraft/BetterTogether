@@ -39,6 +39,8 @@ local DB_DEFAULTS = {
   locked      = false,
   debug       = false,
   expanded    = true,         -- full-page view (vs collapsed compact card)
+  toasts      = true,         -- slide-in notifications on partner presence/readiness
+  toastSound  = true,         -- play a soft sound with each toast
   pinnedQuestID = nil,        -- nil => broadcast the super-tracked quest
   thresholds  = {
     durability = 30,          -- percent; below this => blocking red (§8.2)
@@ -325,6 +327,33 @@ SlashCmdList["BETTERTOGETHER"] = function(msg)
   elseif cmd == "selftest" then
     if ns.Comm then ns.Comm.ToggleSelfTest() end
 
+  elseif cmd == "auras" then
+    -- Diagnostic: list the player's helpful auras (name = spellId). Use this with a
+    -- flask/food/rune active to capture exact spellIDs for src/Core/Consumables.lua.
+    ns:Print("helpful auras (name = spellId):")
+    local function dump(a)
+      if a and a.spellId then ns:Print("  " .. tostring(a.name) .. " = |cffffff00" .. tostring(a.spellId) .. "|r") end
+    end
+    if AuraUtil and AuraUtil.ForEachAura then
+      AuraUtil.ForEachAura("player", "HELPFUL", nil, function(a) dump(a); return false end, true)
+    elseif C_UnitAuras and C_UnitAuras.GetAuraDataByIndex then
+      for i = 1, 60 do
+        local a = C_UnitAuras.GetAuraDataByIndex("player", i, "HELPFUL")
+        if not a then break end
+        dump(a)
+      end
+    end
+
+  elseif cmd == "toast" then
+    -- Preview the partner-presence notification without needing a live state change.
+    if ns.UI and ns.UI.Toast then
+      local T, V = ns.UI.Toast, ns.UI.Theme and ns.UI.Theme.VERDICT_RGB
+      local who = ns.state.partnerName or L["Partner"]
+      T.Show({ title = string.format(L["%s is ready"], who), subtitle = L["All checks passed — good to pull."],
+        icon = "Interface\\Icons\\Achievement_GuildPerk_EverybodysFriend",
+        color = V and V.ready, sound = SOUNDKIT and SOUNDKIT.READY_CHECK })
+    end
+
   elseif cmd == "debug" then
     ns.db.debug = not ns.db.debug
     ns:Print("debug " .. (ns.db.debug and "ON" or "OFF"))
@@ -344,7 +373,7 @@ SlashCmdList["BETTERTOGETHER"] = function(msg)
       ns:Print("  |cffffff00/bt partners|r — " .. L["list saved partners"] .. "   |cffffff00/bt switch <name>|r — " .. L["make one active"])
       ns:Print("  |cffffff00/bt unpair|r · |cffffff00/bt sync|r · |cffffff00/bt lock|r · |cffffff00/bt show|r/|cffffff00hide|r · |cffffff00/bt reset|r")
       ns:Print("  |cffffff00/bt privacy|r — " .. L["choose what to share with your partner"])
-      ns:Print("  |cffffff00/bt test|r (loopback) · |cffffff00/bt selftest|r · |cffffff00/bt debug|r · |cffffff00/bt|r (" .. L["options"] .. ")")
+      ns:Print("  |cffffff00/bt test|r (loopback) · |cffffff00/bt selftest|r · |cffffff00/bt toast|r · |cffffff00/bt auras|r · |cffffff00/bt debug|r · |cffffff00/bt|r (" .. L["options"] .. ")")
     end
   end
 end

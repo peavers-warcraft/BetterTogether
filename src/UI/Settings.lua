@@ -114,7 +114,19 @@ local function buildPanel()
     function() return ns.db.scale or 1.0 end,
     function(v) ns.Dashboard.SetScale(v) end,
     function(v) return string.format(L["Panel scale: %.2f"], v) end)
-  scaleS:SetPoint("TOPLEFT", leftX + 4, cy); cy = cy - 50
+  scaleS:SetPoint("TOPLEFT", leftX + 4, cy); cy = cy - 46
+
+  local toastCB = makeCheck(panel, L["Show notifications"],
+    L["Slide-in toasts when your partner comes online, gets ready, or drops below ready."],
+    function() return ns.db.toasts ~= false end,
+    function(v) ns.db.toasts = v end)
+  toastCB:SetPoint("TOPLEFT", leftX, cy); cy = cy - 26
+
+  local toastSndCB = makeCheck(panel, L["Notification sound"],
+    L["Play a soft sound with each notification."],
+    function() return ns.db.toastSound ~= false end,
+    function(v) ns.db.toastSound = v end)
+  toastSndCB:SetPoint("TOPLEFT", leftX + 16, cy); cy = cy - 44
 
   header(L["Thresholds"], leftX, cy); cy = cy - 24
   local durS = makeSlider(panel, L["Durability"], 0, 100, 5,

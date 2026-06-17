@@ -129,6 +129,55 @@ local function updateHeader(snap, verdict)
 end
 
 -- ---------------------------------------------------------------------------
+-- Presence + readiness toasts (the proactive layer over the passive panel).
+-- Refresh runs ~every 2s and computes a verdict; we watch for *transitions* and
+-- surface a toast + a ping on the title-bar dot. Seeded silently on first sight so
+-- a login / reload doesn't fire, and readiness toasts only fire between two "real"
+-- verdicts (never to/from the wait/offline placeholders), so flicker stays quiet.
+-- ---------------------------------------------------------------------------
+local function classIcon(cls)
+  local atlas = (cls and cls ~= "") and ("classicon-" .. strlower(cls)) or nil
+  if atlas and Theme.AtlasExists(atlas) then return atlas end
+  return "Interface\\Icons\\Achievement_GuildPerk_EverybodysFriend"   -- friendly fallback
+end
+
+local toastSeeded, lastLinked, lastVerdict
+local REAL_VERDICT = { ready = true, amber = true, red = true }
+local function notifyTransitions(snap, verdict)
+  local Toast = ns.UI and ns.UI.Toast
+  local linked = ns.state.linked == true
+  local name = ns.state.partnerName or L["Partner"]
+  if not toastSeeded then   -- first observation this session: record, don't announce
+    toastSeeded, lastLinked, lastVerdict = true, linked, verdict
+    return
+  end
+  local pal, snd = Theme.VERDICT_RGB, SOUNDKIT
+  if Toast then
+    if linked ~= lastLinked then
+      if linked then
+        Toast.Show({ title = string.format(L["%s is online"], name), subtitle = L["Linked up — syncing now."],
+          icon = classIcon(snap.cls), color = pal.ready, sound = snd and snd.UI_BNET_TOAST })
+      else
+        Toast.Show({ title = string.format(L["%s went offline"], name), subtitle = L["You'll reconnect automatically."],
+          icon = classIcon(snap.cls), color = pal.offline, sound = snd and snd.UI_BNET_TOAST })
+      end
+    elseif linked and verdict ~= lastVerdict and REAL_VERDICT[verdict] and REAL_VERDICT[lastVerdict] then
+      if verdict == "ready" then
+        Toast.Show({ title = string.format(L["%s is ready"], name), subtitle = L["All checks passed — good to pull."],
+          icon = classIcon(snap.cls), color = pal.ready, sound = snd and snd.READY_CHECK })
+      elseif verdict == "red" and lastVerdict == "ready" then
+        Toast.Show({ title = string.format(L["%s is no longer ready"], name), subtitle = L["Hold up — a check needs attention."],
+          icon = classIcon(snap.cls), color = pal.red, sound = snd and snd.UI_BNET_TOAST })
+      end
+    end
+  end
+  if verdict ~= lastVerdict and panel and panel.vPing then
+    panel.vPing(pal[verdict] or pal.wait)   -- visual cue even when toasts are off
+  end
+  lastLinked, lastVerdict = linked, verdict
+end
+
+-- ---------------------------------------------------------------------------
 -- Nav buttons
 -- ---------------------------------------------------------------------------
 local function setNavActive(b, active)
@@ -536,6 +585,30 @@ function Dashboard.Init()
   if panel.CloseButton then vDot:SetPoint("RIGHT", panel.CloseButton, "LEFT", -2, 0)
   else vDot:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -8, -6) end
   panel.vDot = vDot
+
+  -- A soft circular ring that blooms out from the dot and fades when the verdict
+  -- changes — an at-a-glance "something just happened" cue. Drawn behind the dot
+  -- (ARTWORK) so it never hides it; a single OnUpdate runs only while playing.
+  local ping = panel:CreateTexture(nil, "ARTWORK")
+  ping:SetSize(16, 16); ping:SetPoint("CENTER", vDot, "CENTER", 0, 0)
+  ping:SetColorTexture(1, 1, 1, 1)
+  local pingMask = panel:CreateMaskTexture()
+  pingMask:SetAllPoints(ping); pingMask:SetTexture(Theme.CIRCLE_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+  ping:AddMaskTexture(pingMask); ping:Hide()
+  local pingDriver = CreateFrame("Frame", nil, panel); pingDriver:Hide()
+  local P_DUR, P_BASE, P_PEAK = 0.6, 16, 40
+  pingDriver:SetScript("OnUpdate", function(self, dt)
+    self.t = (self.t or 0) + dt
+    local f = self.t / P_DUR
+    if f >= 1 then ping:Hide(); self:Hide(); return end
+    ping:SetSize(P_BASE + (P_PEAK - P_BASE) * f, P_BASE + (P_PEAK - P_BASE) * f)
+    ping:SetAlpha(0.5 * (1 - f))
+  end)
+  panel.vPing = function(col)
+    col = col or Theme.GOLD
+    ping:SetColorTexture(col[1], col[2], col[3], 1)
+    pingDriver.t = 0; ping:Show(); pingDriver:Show()
+  end
   local vLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal"); vLabel:SetPoint("RIGHT", vDot, "LEFT", -5, 0)
   local vff = GameFontNormal:GetFont(); if vff then vLabel:SetFont(vff, 14) end
   panel.vLabel = vLabel
@@ -797,6 +870,7 @@ function Dashboard.Refresh()
   if not panel then return end
   local snap, verdict = getContext()
   updateHeader(snap, verdict)
+  notifyTransitions(snap, verdict)
 
   local r, g, b = S.classColor(snap.cls)
 
