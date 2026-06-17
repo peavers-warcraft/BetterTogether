@@ -216,7 +216,7 @@ local function makeRow(parent)
   row:SetBackdropColor(1, 1, 1, 0.03)
   row:SetBackdropBorderColor(0.35, 0.35, 0.35, 0.35)
 
-  local hl = row:CreateTexture(nil, "BACKGROUND"); hl:SetAllPoints(row)
+  local hl = row:CreateTexture(nil, "BACKGROUND"); hl:SetAllPoints(row --[[@as Frame]])
   hl:SetColorTexture(1, 1, 1, 0.05); hl:Hide()
   row:SetScript("OnEnter", function() hl:Show() end)
   row:SetScript("OnLeave", function() hl:Hide() end)

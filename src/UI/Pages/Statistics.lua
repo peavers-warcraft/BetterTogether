@@ -87,7 +87,7 @@ local function build(host)
     t.lbl = t:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall"); t.lbl:SetPoint("TOP", t.num, "BOTTOM", 0, -4)
     t.lbl:SetText(def.label); t.lbl:SetTextColor(0.75, 0.72, 0.6)
     -- subtle hover glow
-    local hl = t:CreateTexture(nil, "BACKGROUND"); hl:SetAllPoints(t); hl:SetColorTexture(1, 1, 1, 0.04); hl:Hide()
+    local hl = t:CreateTexture(nil, "BACKGROUND"); hl:SetAllPoints(t --[[@as Frame]]); hl:SetColorTexture(1, 1, 1, 0.04); hl:Hide()
     t:HookScript("OnEnter", function() hl:Show() end); t:HookScript("OnLeave", function() hl:Hide() end)
     f.tiles[def.key] = t
   end

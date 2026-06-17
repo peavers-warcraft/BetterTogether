@@ -18,7 +18,6 @@ ns.UI = ns.UI or {}
 local DetailPane = {}
 ns.UI.DetailPane = DetailPane
 
-local Theme = ns.UI.Theme
 local Widgets = ns.UI.Widgets
 local Layout = ns.UI.Layout
 local L = ns.L
