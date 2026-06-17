@@ -457,4 +457,5 @@ local function refresh(f, ctx)
   return h
 end
 
-ns.Dashboard.RegisterPage({ key = "partners", label = L["Partners"], order = 8, separator = true, build = build, refresh = refresh })
+-- skipEmptyState: this is where you pair, so it must render even with no partner.
+ns.Dashboard.RegisterPage({ key = "partners", label = L["Partners"], order = 8, separator = true, skipEmptyState = true, build = build, refresh = refresh })

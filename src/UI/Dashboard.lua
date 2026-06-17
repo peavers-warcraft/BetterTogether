@@ -137,6 +137,7 @@ function Dashboard.Init()
   ns.UI.Nav.Build(panel, content, pages)
   ns.UI.DetailPane.Build(content)
   ns.UI.SettingsView.Build(content)
+  ns.UI.EmptyState.Build(content)
   ns.UI.Compact.Build(content)
 
   Dashboard.RestorePosition()
@@ -239,6 +240,7 @@ function Dashboard.Refresh()
     -- SETTINGS tab: hide the dashboard view; show the settings column + its tips pane.
     ns.UI.Nav.SetShown(false); host:Hide()
     ns.UI.DetailPane.SetShown(false)
+    ns.UI.EmptyState.SetShown(false)
     for _, d in ipairs(pages) do if d.frame then d.frame:Hide() end end
     ns.UI.Compact.SetShown(false)
     panel.collapseBtn:Hide()          -- compact mode doesn't apply to settings
@@ -256,6 +258,7 @@ function Dashboard.Refresh()
   if not ns.db.expanded then
     -- COMPACT
     ns.UI.Nav.SetShown(false); host:Hide()
+    ns.UI.EmptyState.SetShown(false)
     for _, d in ipairs(pages) do if d.frame then d.frame:Hide() end end
     ns.UI.Compact.SetShown(true)
     panel:SetWidth(WIDTH_COMPACT)
@@ -267,11 +270,38 @@ function Dashboard.Refresh()
 
   -- EXPANDED (tabbed) — FIXED window size, content scrolls
   ns.UI.Compact.SetShown(false)
-  ns.UI.Nav.SetShown(true); host:Show()
+  ns.UI.Nav.SetShown(true)
   panel:SetWidth(WIDTH_EXPANDED)
   panel:SetHeight(PANEL_H_EXPANDED)
 
   local desc = pagesByKey[activeKey] or pages[1]
+
+  -- Decide whether this page has nothing to show and should hand the whole content area
+  -- (page host + detail pane) to the shared centered prompt. Two cases:
+  --   * No live partner — every data page is a you-vs-partner comparison, so there's
+  --     nothing to compare. Skipped on pages that manage pairing itself (skipEmptyState).
+  --   * The page itself reports an empty state (desc.emptyState) — e.g. the partner has
+  --     turned off sharing that data type. Only consulted while a partner is connected.
+  -- The left nav stays in both cases so the user can still move around.
+  local connected = ns.state.linked and ns.state.partner ~= nil
+  local spec
+  if not connected and not (desc and desc.skipEmptyState) then
+    spec = ns.UI.EmptyState.NoPartnerSpec(verdict, ns.state.partnerName)
+  elseif connected and desc and desc.emptyState then
+    spec = desc.emptyState(snap, verdict)
+  end
+
+  if spec then
+    host:Hide()
+    ns.UI.DetailPane.SetShown(false)
+    for _, d in ipairs(pages) do if d.frame then d.frame:Hide() end end
+    ns.UI.EmptyState.Show(spec)
+    panel:SetShown(shouldShow)
+    return
+  end
+  ns.UI.EmptyState.SetShown(false)
+  host:Show()
+
   local detailOn = desc and desc.detail or false
   ns.UI.DetailPane.SetShown(detailOn)
   host:SetWidth(Layout.scrollWidth(detailOn))

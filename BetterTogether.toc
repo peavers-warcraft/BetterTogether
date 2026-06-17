@@ -44,6 +44,7 @@ src\UI\Shell\DetailPane.lua
 src\UI\Shell\Compact.lua
 src\UI\Shell\Presence.lua
 src\UI\Shell\SettingsView.lua
+src\UI\Shell\EmptyState.lua
 src\UI\Dashboard.lua
 src\UI\SettingsTab.lua
 src\UI\Pages\Overview.lua

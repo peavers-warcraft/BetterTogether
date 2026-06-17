@@ -115,19 +115,19 @@ local function questRow(id, title, status, you, partner)
   }
 end
 
-local function getSections(snap)
-  -- Checked before any cached data: a partner who turns sharing off stops sending
-  -- QLOG but we may still hold their last list, so this must win over stale data.
+-- Partner opt-out / no-partner are handled by the shell's shared full-width empty state
+-- (ns.UI.EmptyState) before this page renders — opt-out via the descriptor's emptyState
+-- hook below, no-partner centrally. So getSections only ever runs with a sharing partner.
+local function emptyState()
+  -- Checked before any cached data: a partner who turns sharing off stops sending QLOG
+  -- but we may still hold their last list, so this must win over stale data.
   if not ns.PartnerShares("questlog") then
-    return { fullPage = { text = "|cff808080" .. string.format(L["%s has turned off sharing their quest log."], ns.Util.PartnerName(L["Your partner"])) .. "|r" } }
+    return { title = L["Quest sharing is off"],
+      sub = string.format(L["%s has turned off sharing their quest log."], ns.Util.PartnerName(L["Your partner"])) }
   end
+end
 
-  -- Not paired yet: nothing to compare — a calm prompt rather than a spinner that
-  -- would otherwise spin forever waiting on a partner who'll never arrive.
-  if ns.state.partner == nil then
-    return { fullPage = { text = "|cff808080" .. L["Pair with your partner to compare quests."] .. "|r" } }
-  end
-
+local function getSections(snap)
   local own = (ns.QuestSync and ns.QuestSync.Scan()) or {}
   local partner = ns.state.partner.qlog
 
@@ -185,7 +185,7 @@ local build, refresh = S.makeRowPage(getSections)
 ns.Dashboard.RegisterPage({
   key = "quests", label = L["Quests"], order = 4, detail = true,
   detailTitle = L["Quest Details"], detailHint = L["Hover or click a quest to see its objectives."],
-  build = build, refresh = refresh,
+  build = build, refresh = refresh, emptyState = emptyState,
   onShow = function()
     detail.unlock()
     if ns.Comm and ns.Comm.RequestQuests then ns.Comm.RequestQuests() end

@@ -253,18 +253,19 @@ local function bucketFor(classID)
   else return "Other" end
 end
 
-local function getSections(snap)
+-- Partner opt-out / no-partner are handled by the shell's shared full-width empty state
+-- (ns.UI.EmptyState) before this page renders — opt-out via the descriptor's emptyState
+-- hook below, no-partner centrally. So getSections only ever runs with a sharing partner.
+local function emptyState()
   -- Checked before cached data: turning sharing off stops the feed but we may still
   -- hold their last bags, so the opt-out message must win over a stale list.
   if not ns.PartnerShares("inventory") then
-    return { fullPage = { text = "|cff808080" .. string.format(L["%s has turned off sharing their inventory."], ns.Util.PartnerName(L["Your partner"])) .. "|r" } }
+    return { title = L["Inventory sharing is off"],
+      sub = string.format(L["%s has turned off sharing their inventory."], ns.Util.PartnerName(L["Your partner"])) }
   end
+end
 
-  -- Not paired yet: prompt to pair rather than spin forever on bags that won't come.
-  if ns.state.partner == nil then
-    return { fullPage = { text = "|cff808080" .. L["Pair with your partner to compare inventory."] .. "|r" } }
-  end
-
+local function getSections(snap)
   local inv = ns.state.partner.inv or {}
   if #inv == 0 then
     return { fullPage = { spinner = true,
@@ -307,6 +308,6 @@ local build, refresh = S.makeRowPage(getSections)
 
 ns.Dashboard.RegisterPage({
   key = "inventory", label = L["Inventory"], order = 6, detail = true,
-  build = build, refresh = refresh,
+  build = build, refresh = refresh, emptyState = emptyState,
   onShow = function() if ns.Comm and ns.Comm.RequestInventory then ns.Comm.RequestInventory() end end,
 })

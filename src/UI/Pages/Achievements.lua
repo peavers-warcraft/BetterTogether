@@ -131,8 +131,6 @@ local function partnerEra(eraKey)
   return ns.state.partner and ns.state.partner.achv and ns.state.partner.achv[eraKey] or nil
 end
 
-local function partnerLinked() return ns.state.partner ~= nil end
-
 local function ensurePartnerEra(eraKey)
   if not eraKey or not ns.state.partner then return end
   ns.state.partner.achv = ns.state.partner.achv or {}
@@ -382,6 +380,15 @@ local function fullPageNote(f, colW, text, spinner)
   return S.showFullPageState(f, colW, text, spinner)
 end
 
+-- Partner has turned off achievement sharing: their list will never arrive, so hand
+-- the page to the shared full-width empty state rather than holding a note forever.
+local function emptyState()
+  if not ns.PartnerShares("achievements") then
+    return { title = L["Achievement sharing is off"],
+      sub = string.format(L["%s has turned off sharing their achievements."], ns.Util.PartnerName(L["Your partner"])) }
+  end
+end
+
 -- ---------------------------------------------------------------------------
 -- Refresh
 -- ---------------------------------------------------------------------------
@@ -395,11 +402,10 @@ local function refresh(f, ctx)
   -- centered beneath the list instead. f.browseHeader stays hidden.
   Widgets.HideHeader(f.browseHeader)
 
-  -- Not linked: a single prompt — nothing to browse or feature yet.
-  if not partnerLinked() then
-    return fullPageNote(f, colW,
-      "|cff808080" .. L["Pair with your partner to compare achievements."] .. "|r")
-  end
+  -- No-partner / partner-offline AND the partner-opted-out state are handled by the
+  -- shell's shared full-width empty state (ns.UI.EmptyState) before this page renders —
+  -- opt-out via the descriptor's emptyState hook, no-partner centrally. So refresh only
+  -- ever runs with a sharing partner.
 
   -- Our own achievements are scanned across frames (the full DB is large), so the
   -- page opens instantly. Show a note while the first scan runs, then repaint — this
@@ -408,13 +414,6 @@ local function refresh(f, ctx)
     ns.AchvSync.Ensure(function() if ns.Dashboard then ns.Dashboard.Refresh() end end)
     return fullPageNote(f, colW,
       "|cffd0d0d0" .. L["Gathering your achievements…"] .. "|r\n|cff808080" .. L["This only takes a moment the first time you open it."] .. "|r", true)
-  end
-
-  -- Partner has turned off achievement sharing: their list will never arrive, so say
-  -- so plainly instead of holding the "gathering…" note forever.
-  if not ns.PartnerShares("achievements") then
-    return fullPageNote(f, colW,
-      "|cff808080" .. string.format(L["%s has turned off sharing their achievements."], ns.Util.PartnerName(L["Your partner"])) .. "|r")
   end
 
   viewEra = viewEra or defaultEra()
@@ -571,7 +570,7 @@ end
 ns.Dashboard.RegisterPage({
   key = "achievements", label = L["Achievements"], order = 3, detail = true,
   detailTitle = L["Achievement"], detailHint = L["Hover or click an achievement to see it here."],
-  build = build, refresh = refresh,
+  build = build, refresh = refresh, emptyState = emptyState,
   onShow = function()
     detail.unlock()
     viewEra = nil           -- reopen lands on the newest era you have
