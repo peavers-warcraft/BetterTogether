@@ -36,6 +36,9 @@ end
 --- This player's own "Name-Realm" target.
 --- @return string full The player's full name (bare name if the realm is unavailable).
 function Util.MyFullName()
+  -- UnitName("player") is always present once the player is in world (the only time this
+  -- is called), so FullName never hits its nil path here — hence the string return holds.
+  ---@diagnostic disable-next-line: return-type-mismatch
   return Util.FullName(UnitName("player"))
 end
 

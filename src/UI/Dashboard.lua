@@ -34,8 +34,20 @@ local pages, pagesByKey = {}, {}
 local activeKey
 local shouldShow = true
 
+-- Top-level (bottom) tabs that swap the whole view: the existing dashboard vs the
+-- consolidated settings page (Plumber-style bottom tab bar).
+local MAIN_TABS = { { key = "dashboard", label = L["Dashboard"] }, { key = "settings", label = L["Settings"] } }
+local mainTabBar, settingsHost, settingsFrame
+local mainTabButtons = {}
+local activeMainTab = "dashboard"
+
 local function hostWidth(detail) return WIDTH_EXPANDED - HOST_X - PAD - (detail and (DETAIL_W + 18) or 0) end
 local function scrollWidth(detail) return hostWidth(detail) - SCROLLBAR_W end
+-- Settings view has no left nav, so its content starts at PAD; it DOES reserve a
+-- right-side tips pane (DETAIL_W, like the dashboard pages' detail pane), so the
+-- scrollable column stops short of that pane.
+local function settingsHostWidth() return WIDTH_EXPANDED - PAD - PAD - (DETAIL_W + 18) end
+local function settingsScrollWidth() return settingsHostWidth() - SCROLLBAR_W end
 
 -- Auto-fit. The expanded panel is a fixed WIDTH_EXPANDED x PANEL_H_EXPANDED, sized
 -- to nearly fill a standard 768-unit-tall UI. On large monitors / low WoW UI-scale
@@ -220,6 +232,28 @@ local function makeNavButton(parent, desc)
   b:SetScript("OnLeave", function() hl:Hide() end)
   b:SetScript("OnClick", function() Dashboard.Select(desc.key) end)
   setNavActive(b, false)
+  return b
+end
+
+-- ---------------------------------------------------------------------------
+-- Bottom tab bar (Dashboard / Settings) — native Blizzard frame tabs that hang
+-- beneath the panel, the same PanelTabButtonTemplate used by the character sheet,
+-- spellbook, etc. PanelTemplates_* drives selection so the active tab reads as
+-- "connected" to the frame exactly like a stock UI panel.
+-- ---------------------------------------------------------------------------
+local function setMainTabActive(b, active)
+  b.active = active
+  if active then PanelTemplates_SelectTab(b) else PanelTemplates_DeselectTab(b) end
+end
+
+local tabCount = 0
+local function makeMainTabButton(parent, def)
+  tabCount = tabCount + 1
+  local b = CreateFrame("Button", "BetterTogetherMainTab" .. tabCount, parent, "PanelTabButtonTemplate")
+  b.key = def.key
+  b:SetText(def.label)
+  b:SetScript("OnClick", function() Dashboard.ShowMainTab(def.key) end)
+  PanelTemplates_TabResize(b, 0)
   return b
 end
 
@@ -643,6 +677,53 @@ function Dashboard.Init()
   panel.host = host
   styleScrollbar(host)
 
+  -- Full-width scroll host for the Settings tab (no left nav / detail pane). Lives
+  -- alongside `host`; ShowMainTab toggles which one is visible. Hidden until needed.
+  settingsHost = CreateFrame("ScrollFrame", "BetterTogetherSettingsScroll", content, "UIPanelScrollFrameTemplate")
+  settingsHost:SetPoint("TOPLEFT", content, "TOPLEFT", PAD, -PAD)
+  settingsHost:SetPoint("BOTTOMLEFT", content, "BOTTOMLEFT", PAD, PAD)
+  settingsHost:SetWidth(settingsScrollWidth())
+  settingsHost:EnableMouseWheel(true)
+  settingsHost:SetScript("OnMouseWheel", function(self, delta)
+    local new = math.min(self:GetVerticalScrollRange(), math.max(0, self:GetVerticalScroll() - delta * 45))
+    self:SetVerticalScroll(new)
+  end)
+  settingsHost:Hide()
+  panel.settingsHost = settingsHost
+  styleScrollbar(settingsHost)
+
+  -- Settings tips pane: a right-side helper column that mirrors the dashboard pages'
+  -- detail pane, but renders a plain explanation for the setting under the cursor.
+  -- A chip + gold title name the focused setting; the body holds the description. A
+  -- divider separates it from the scrollable settings column, just like detailDiv.
+  local sTipDiv = content:CreateTexture(nil, "ARTWORK")
+  sTipDiv:SetColorTexture(1, 1, 1, 0.08); sTipDiv:SetWidth(1)
+  sTipDiv:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PAD - DETAIL_W - 9, -PAD)
+  sTipDiv:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", -PAD - DETAIL_W - 9, PAD)
+  sTipDiv:Hide(); panel.settingsTipDiv = sTipDiv
+
+  local sTip = CreateFrame("Frame", nil, content)
+  sTip:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PAD, -PAD)
+  sTip:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", -PAD, PAD)
+  sTip:SetWidth(DETAIL_W)
+  local stHdr = Widgets.SectionHeader(sTip)
+  stHdr.label:SetPoint("TOPLEFT", sTip, "TOPLEFT", 0, 0)
+  Widgets.StyleHeader(stHdr, L["Settings help"], DETAIL_W)
+  panel.settingsTipHdr = stHdr
+  local stChip = Widgets.Chip(sTip, 40)
+  stChip:SetPoint("TOPLEFT", sTip, "TOPLEFT", 0, -42); stChip:Hide()
+  panel.settingsTipChip = stChip
+  local stName = sTip:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  stName:SetWidth(DETAIL_W - 52); stName:SetJustifyH("LEFT"); stName:SetJustifyV("MIDDLE")
+  stName:SetTextColor(Theme.GOLD[1], Theme.GOLD[2], Theme.GOLD[3])
+  stName:SetPoint("LEFT", stChip, "RIGHT", 10, 0); stName:Hide()
+  panel.settingsTipName = stName
+  local stText = sTip:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  stText:SetWidth(DETAIL_W - 2); stText:SetJustifyH("LEFT"); stText:SetJustifyV("TOP"); stText:SetSpacing(6)
+  local stff = GameFontHighlight:GetFont(); if stff then stText:SetFont(stff, Theme.FONT_BODY) end
+  panel.settingsTipText = stText
+  sTip:Hide(); panel.settingsTip = sTip
+
   -- Right-side preview/detail pane (Plumber-style). Pages opt in via desc.detail.
   local detailDiv = content:CreateTexture(nil, "ARTWORK")
   detailDiv:SetColorTexture(1, 1, 1, 0.08); detailDiv:SetWidth(1)
@@ -738,12 +819,42 @@ function Dashboard.Init()
 
   compact = buildCompact(content)
 
+  -- Bottom tab bar: native Blizzard frame tabs hung beneath the panel, the same
+  -- look the character sheet / spellbook use. The tabs' top edge tucks up under the
+  -- panel's bottom border so the active tab reads as part of the frame; subsequent
+  -- tabs overlap by the template's built-in side art (the standard -15 inset).
+  mainTabBar = CreateFrame("Frame", nil, panel)
+  mainTabBar:SetPoint("TOPLEFT", panel, "BOTTOMLEFT", 16, 1)
+  mainTabBar:SetHeight(32)
+  -- The modern uiframe-tab atlas tabs have visible rounded end-caps (not the old
+  -- template's transparent side padding), so they sit flush — no negative inset, or
+  -- they'd overlap each other. A couple px of gap keeps the caps from touching.
+  local TAB_GAP = 2
+  local prevTab, totalW = nil, 0
+  for _, def in ipairs(MAIN_TABS) do
+    local b = makeMainTabButton(mainTabBar, def)
+    if prevTab then
+      b:SetPoint("LEFT", prevTab, "RIGHT", TAB_GAP, 0)
+      totalW = totalW + (b:GetWidth() or 0) + TAB_GAP
+    else
+      b:SetPoint("TOPLEFT", mainTabBar, "TOPLEFT", 0, 0)
+      totalW = totalW + (b:GetWidth() or 0)
+    end
+    prevTab = b
+    table.insert(mainTabButtons, b)
+  end
+  -- Give the bar a real width. Without it the container's rect is indeterminate, so
+  -- GetLeft() returns nil and the child tabs — anchored to it — never resolve a
+  -- screen position and silently don't draw (even though their textures are shown).
+  mainTabBar:SetWidth(math.max(1, totalW))
+
   Dashboard.RestorePosition()
   applyScale()
   -- Keep the fit current if the player changes resolution or WoW's UI scale.
   ns:RegisterEvent("DISPLAY_SIZE_CHANGED", applyScale)
   ns:RegisterEvent("UI_SCALE_CHANGED", applyScale)
   Dashboard.Select(ns.chardb.lastTab or "overview")
+  Dashboard.ShowMainTab(ns.chardb.lastMainTab or "dashboard")
   Dashboard.ApplyMode()
   C_Timer.NewTicker(2.0, function() Dashboard.Refresh() end)
 end
@@ -833,7 +944,56 @@ end
 
 function Dashboard.OpenTab(key)
   ns.db.expanded = true
-  if panel then Dashboard.Select(key); Dashboard.ApplyMode(); Dashboard.Show() end
+  if panel then
+    Dashboard.ShowMainTab("dashboard")   -- left-nav pages live under the Dashboard tab
+    Dashboard.Select(key); Dashboard.ApplyMode(); Dashboard.Show()
+  end
+end
+
+-- Open the panel straight to the consolidated Settings tab.
+function Dashboard.OpenSettings()
+  if not panel then return end
+  Dashboard.Show()
+  Dashboard.ShowMainTab("settings")
+end
+
+-- Default copy for the settings tips pane (shown until a setting is hovered).
+local DEFAULT_SETTING_TIP =
+  L["Hover any option on the left and its explanation appears here.\n\nEverything in Settings is saved automatically — there's no apply button."]
+
+--- Populate the Settings tips pane. With a title, shows a chip + gold name + body for
+--- the focused setting; with no title, shows just the default body from the top.
+--- @param title string|nil Setting name.
+--- @param body string Explanation text.
+--- @param icon string|number|nil Icon art for the chip (defaults to a gear).
+function Dashboard.SetSettingTip(title, body, icon)
+  if not (panel and panel.settingsTip) then return end
+  if title and title ~= "" then
+    Theme.ApplyIcon(panel.settingsTipChip.icon, icon or Theme.I_GEAR)
+    panel.settingsTipChip:Show()
+    panel.settingsTipName:SetText(title); panel.settingsTipName:Show()
+    panel.settingsTipText:ClearAllPoints()
+    panel.settingsTipText:SetPoint("TOPLEFT", panel.settingsTipChip, "BOTTOMLEFT", 0, -14)
+  else
+    panel.settingsTipChip:Hide(); panel.settingsTipName:Hide()
+    panel.settingsTipText:ClearAllPoints()
+    panel.settingsTipText:SetPoint("TOPLEFT", panel.settingsTip, "TOPLEFT", 0, -42)
+  end
+  panel.settingsTipText:SetText(body or "")
+end
+
+--- Restore the tips pane to its neutral default (no setting focused).
+function Dashboard.ResetSettingTip() Dashboard.SetSettingTip(nil, DEFAULT_SETTING_TIP) end
+
+--- Switch the top-level view between the dashboard and the settings page.
+--- @param key string "dashboard" | "settings"
+function Dashboard.ShowMainTab(key)
+  if key ~= "settings" then key = "dashboard" end
+  activeMainTab = key
+  ns.chardb.lastMainTab = key
+  for _, b in ipairs(mainTabButtons) do setMainTabActive(b, b.key == key) end
+  if key == "settings" then Dashboard.ResetSettingTip() end
+  Dashboard.Refresh()
 end
 
 --- Switch the visible tab to `key` (falls back to the first page).
@@ -873,6 +1033,45 @@ function Dashboard.Refresh()
   notifyTransitions(snap, verdict)
 
   local r, g, b = S.classColor(snap.cls)
+
+  if activeMainTab == "settings" then
+    -- SETTINGS tab: hide the dashboard view; show the settings column + its tips pane.
+    nav:Hide(); host:Hide(); panel.navDiv:Hide()
+    panel.detail:Hide(); panel.detailDiv:Hide()
+    for _, d in ipairs(pages) do if d.frame then d.frame:Hide() end end
+    showCompact(compact, false)
+    panel.collapseBtn:Hide()          -- compact mode doesn't apply to settings
+    panel:SetWidth(WIDTH_EXPANDED)    -- always full size, even if the dashboard was collapsed
+    panel:SetHeight(PANEL_H_EXPANDED)
+    panel.settingsTip:Show(); panel.settingsTipDiv:Show()
+    settingsHost:Show(); settingsHost:SetWidth(settingsScrollWidth())
+    -- Guard against re-entrancy while building: a widget's setup (e.g. a slider's
+    -- initial SetValue) can fire a callback that calls Refresh() again before
+    -- settingsFrame is assigned, which would re-build and recurse until the stack
+    -- overflows. Skip this Refresh if a build is already in flight.
+    if not settingsFrame and not Dashboard._buildingSettings and ns.UI.SettingsTab then
+      Dashboard._buildingSettings = true
+      settingsFrame = ns.UI.SettingsTab.build(settingsHost)
+      settingsHost:SetScrollChild(settingsFrame)
+      Dashboard._buildingSettings = false
+    end
+    if settingsFrame then
+      settingsFrame:Show()
+      if ns.UI.SettingsTab.refresh then
+        ns.UI.SettingsTab.refresh(settingsFrame, { snap = snap, verdict = verdict, width = settingsScrollWidth(), r = r, g = g, b = b })
+      end
+      settingsHost:UpdateScrollChildRect()
+    end
+    local ssb = settingsHost.ScrollBar
+    if ssb then ssb:SetShown((settingsHost:GetVerticalScrollRange() or 0) > 1) end
+    panel:SetShown(shouldShow)
+    return
+  end
+
+  -- DASHBOARD tab: settings hidden, collapse affordance available again.
+  settingsHost:Hide()
+  panel.settingsTip:Hide(); panel.settingsTipDiv:Hide()
+  panel.collapseBtn:Show()
 
   if not ns.db.expanded then
     -- COMPACT

@@ -14,7 +14,6 @@ local addonName, ns = ...
 ns.UI = ns.UI or {}
 local Theme = ns.UI.Theme
 local Widgets = ns.UI.Widgets
-local L = ns.L
 
 local Toast = {}
 ns.UI.Toast = Toast

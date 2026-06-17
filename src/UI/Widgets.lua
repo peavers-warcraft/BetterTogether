@@ -217,6 +217,90 @@ function Widgets.Spinner(parent, size)
 end
 
 -- ---------------------------------------------------------------------------
+-- Themed slider: a restyled WoW Slider (the native widget still owns drag/step/value
+-- math, so we only reskin it) with a thin dark track, a gold fill up to the thumb, a
+-- circular gold thumb, and a label + live value above it. Replaces the stock blue
+-- OptionsSliderTemplate so sliders match the rest of the dark-gold panel.
+-- Returns a container frame `c` (height C.SLIDER_H) holding `.slider`, `.label`, `.val`.
+-- deferApply=true updates the label/fill live while dragging but only runs the setter
+-- on mouse-up (used by the scale slider, which resizes the very panel it sits in).
+-- ---------------------------------------------------------------------------
+Widgets.SLIDER_H = 42
+--- @param parent table
+--- @param label string Caption shown above the track.
+--- @param minV number @param maxV number @param step number
+--- @param getter function ()->number  @param setter function (number)
+--- @param fmt function|nil (number)->string for the live value text.
+--- @param width number|nil Container/track width (default 320).
+--- @param deferApply boolean|nil Apply only on mouse-up.
+--- @return table c Container frame (`.slider` is the underlying Slider).
+function Widgets.Slider(parent, label, minV, maxV, step, getter, setter, fmt, width, deferApply)
+  width = width or 320
+  local c = CreateFrame("Frame", nil, parent)
+  c:SetSize(width, Widgets.SLIDER_H)
+  local ff = bodyFont()
+
+  local lbl = c:CreateFontString(nil, "OVERLAY")
+  if ff then lbl:SetFont(ff, Theme.FONT_SMALL, "") end
+  lbl:SetPoint("TOPLEFT", c, "TOPLEFT", 0, 0)
+  lbl:SetTextColor(CREAM[1], CREAM[2], CREAM[3]); lbl:SetText(label)
+  c.label = lbl
+
+  local val = c:CreateFontString(nil, "OVERLAY")
+  if ff then val:SetFont(ff, Theme.FONT_SMALL, "") end
+  val:SetPoint("TOPRIGHT", c, "TOPRIGHT", 0, 0)
+  val:SetTextColor(GOLD[1], GOLD[2], GOLD[3])
+  c.val = val
+
+  local s = CreateFrame("Slider", nil, c)
+  s:SetOrientation("HORIZONTAL")
+  s:SetPoint("TOPLEFT", c, "TOPLEFT", 2, -24)
+  s:SetPoint("TOPRIGHT", c, "TOPRIGHT", -2, -24)
+  s:SetHeight(14)
+  s:SetMinMaxValues(minV, maxV); s:SetValueStep(step); s:SetObeyStepOnDrag(true)
+  s:SetHitRectInsets(0, 0, -8, -8)   -- taller grab zone than the 4px track
+  c.slider = s
+
+  local track = c:CreateTexture(nil, "BORDER")
+  track:SetHeight(4); track:SetPoint("LEFT", s, "LEFT", 0, 0); track:SetPoint("RIGHT", s, "RIGHT", 0, 0)
+  track:SetColorTexture(1, 1, 1, 0.10)
+  local fill = c:CreateTexture(nil, "ARTWORK")
+  fill:SetHeight(4); fill:SetPoint("LEFT", track, "LEFT", 0, 0)
+  fill:SetColorTexture(GOLD[1], GOLD[2], GOLD[3], 0.85); fill:SetWidth(0.001)
+
+  local thumb = s:CreateTexture(nil, "OVERLAY")
+  thumb:SetSize(16, 16); thumb:SetColorTexture(GOLD[1], GOLD[2], GOLD[3], 1)
+  local tmask = s:CreateMaskTexture()
+  tmask:SetAllPoints(thumb); tmask:SetTexture(MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+  thumb:AddMaskTexture(tmask)
+  s:SetThumbTexture(thumb)
+
+  local trackW = width - 4
+  local function frac(v) if maxV <= minV then return 0 end return math.max(0, math.min(1, (v - minV) / (maxV - minV))) end
+  local function snap(v) return math.floor(v / step + 0.5) * step end
+  local function updateVisual(v)
+    val:SetText(fmt and fmt(v) or (label .. ": " .. v))
+    fill:SetWidth(math.max(0.001, frac(v) * trackW))
+  end
+  local function apply(v) setter(v); if ns.Dashboard then ns.Dashboard.Refresh() end end
+
+  -- Seed value + visuals BEFORE wiring OnValueChanged: SetValue fires the handler
+  -- synchronously, and apply()->Refresh() during the initial build would re-enter the
+  -- settings build (settingsFrame still nil) and recurse until the stack overflows.
+  s:SetValue(getter()); updateVisual(getter())
+  s:SetScript("OnValueChanged", function(self, value)
+    value = snap(value); updateVisual(value)
+    if not deferApply then apply(value) end
+  end)
+  if deferApply then
+    s:SetScript("OnMouseUp", function(self) apply(snap(self:GetValue())) end)
+  end
+  s:HookScript("OnEnter", function() thumb:SetSize(19, 19) end)
+  s:HookScript("OnLeave", function() thumb:SetSize(16, 16) end)
+  return c
+end
+
+-- ---------------------------------------------------------------------------
 -- Section header: cream label + gold diamond + right-fading gold rule, with an
 -- optional descriptive sub-line. Build once; drive each refresh with StyleHeader.
 -- ---------------------------------------------------------------------------

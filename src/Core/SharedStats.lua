@@ -19,10 +19,8 @@ local SharedStats = {}
 ns.SharedStats = SharedStats
 
 local MPLUS_HISTORY_MAX = 10
-local FLUSH_INTERVAL = 10          -- seconds; accrues time + flushes mob kills
-local playerGUID
+local FLUSH_INTERVAL = 10          -- seconds; accrues together-time
 local lastChallengeAt = 0
-local mobsDirty = false
 
 local function stats() return ns.chardb and ns.chardb.stats end
 
@@ -100,8 +98,6 @@ end
 -- ---------------------------------------------------------------------------
 -- Events
 -- ---------------------------------------------------------------------------
-ns:RegisterEvent("PLAYER_LOGIN", function() playerGUID = UnitGUID("player") end)
-
 ns:RegisterEvent("QUEST_TURNED_IN", function()
   if SharedStats.IsTogether() then bump("quests") end
 end)
@@ -119,25 +115,27 @@ ns:RegisterEvent("PLAYER_LEVEL_UP", function()
   if SharedStats.IsTogether() then bump("levels") end
 end)
 
--- C_ChallengeMode.GetCompletionInfo returns nils/zeros for a short beat after
+-- C_ChallengeMode.GetChallengeCompletionInfo returns nils/zeros for a short beat after
 -- CHALLENGE_MODE_COMPLETED, so a synchronous read records "+0 <unknown>, over time".
 -- Read with retries until the level resolves, and turn the map *ID* it returns into
 -- a name via GetMapUIInfo (same resolution SelfState.readMythic uses for keystones).
+-- (The old GetCompletionInfo, which returned multiple values, was removed in 12.x.)
 local MPLUS_CAPTURE_RETRIES = 6
 local MPLUS_CAPTURE_DELAY = 0.5
 
 local function readChallengeRun()
-  if not (C_ChallengeMode and C_ChallengeMode.GetCompletionInfo) then return nil end
-  local ok, mapID, level, _, onTime = pcall(C_ChallengeMode.GetCompletionInfo)
-  if not ok or not level or level == 0 then return nil end
+  if not (C_ChallengeMode and C_ChallengeMode.GetChallengeCompletionInfo) then return nil end
+  local ok, info = pcall(C_ChallengeMode.GetChallengeCompletionInfo)
+  if not ok or type(info) ~= "table" or not info.level or info.level == 0 then return nil end
+  local mapID = info.mapChallengeModeID
   local name
   if mapID and C_ChallengeMode.GetMapUIInfo then
     name = (C_ChallengeMode.GetMapUIInfo(mapID))
   end
   return {
     map = name or (mapID and ("Map " .. mapID)) or nil,
-    level = level,
-    onTime = onTime and true or false,
+    level = info.level,
+    onTime = info.onTime and true or false,
     ts = (GetServerTime and GetServerTime()) or 0,
   }
 end
@@ -183,26 +181,15 @@ ns:RegisterEvent("PLAYER_DEAD", function()
   if SharedStats.IsTogether() then bump("deaths") end
 end)
 
--- Mob kills: count own killing blows (PARTY_KILL). High frequency, so increment
--- silently and flush on the periodic ticker rather than per kill.
-ns:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED", function()
-  local _, sub, _, srcGUID = CombatLogGetCurrentEventInfo()
-  if sub ~= "PARTY_KILL" then return end
-  if not playerGUID then playerGUID = UnitGUID("player") end
-  if srcGUID == playerGUID and SharedStats.IsTogether() then
-    local s = stats(); if s then s.mobs = (s.mobs or 0) + 1; mobsDirty = true end
-  end
-end)
+-- Mob-kill counting (own PARTY_KILL killing blows) is unavailable on 12.0+: the
+-- combat log moved to "secret values", so registering COMBAT_LOG_EVENT_UNFILTERED
+-- raises ADDON_ACTION_FORBIDDEN and the source GUID can't be compared to the player.
+-- The "mobs" stat is therefore left untracked on current clients.
 
--- Periodic: accrue together-time and flush buffered mob kills.
+-- Periodic: accrue together-time.
 C_Timer.NewTicker(FLUSH_INTERVAL, function()
   local s = stats(); if not s then return end
   if SharedStats.IsTogether() then markFirstTogether(s); s.togetherTime = (s.togetherTime or 0) + FLUSH_INTERVAL end
-  if mobsDirty then
-    mobsDirty = false
-    if ns.Comm and ns.Comm.QueueStats then ns.Comm.QueueStats() end
-    if ns.Dashboard and ns.Dashboard.Refresh then ns.Dashboard.Refresh() end
-  end
 end)
 
 return SharedStats

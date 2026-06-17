@@ -134,6 +134,9 @@ function AchvSync.Ensure(onReady)
     else
       cache = ret or {}
     end
+    -- scanTicker is always set before this callback first runs (NewTicker schedules for
+    -- a later frame), so the :Cancel() is safe despite the upvalue being nil-able.
+    ---@diagnostic disable-next-line: need-check-nil
     scanTicker:Cancel(); scanTicker, scanCo = nil, nil
     flushWaiters()
   end)

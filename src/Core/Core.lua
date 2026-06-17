@@ -93,7 +93,8 @@ local DB_DEFAULTS = {
 -- Per-character config (BetterTogetherCharDB) — frame position lives here (§8.4).
 local CHARDB_DEFAULTS = {
   point = { "CENTER", nil, "CENTER", 0, 120 },
-  lastTab = "overview",         -- remembered tab in the shell
+  lastTab = "overview",         -- remembered left-nav page in the shell
+  lastMainTab = "dashboard",    -- remembered bottom tab: "dashboard" | "settings"
   -- Persistent shared duo statistics (see SharedStats.lua).
   stats = {
     -- shared (both observe the same event; max-merged to stay in sync)
@@ -151,8 +152,16 @@ ns.frame = frame
 -- Register a handler for a game event. Handlers receive (event, ...).
 function ns:RegisterEvent(event, handler)
   if not handlers[event] then
+    -- An unknown/renamed event makes frame:RegisterEvent throw (and on modern
+    -- clients can raise ADDON_ACTION_FORBIDDEN), which would abort the rest of the
+    -- calling module's main chunk. Isolate it — same spirit as the handler pcall in
+    -- OnEvent — so one bad event name can't stop the addon from loading/rendering.
+    local ok, err = pcall(frame.RegisterEvent, frame, event)
+    if not ok then
+      ns:Print("|cffff5555cannot register event " .. tostring(event) .. ":|r " .. tostring(err))
+      return
+    end
     handlers[event] = {}
-    frame:RegisterEvent(event)
   end
   table.insert(handlers[event], handler)
 end
@@ -179,7 +188,7 @@ end
 -- ---------------------------------------------------------------------------
 -- Privacy gate: do we share `key` with the partner? Defaults to true so a missing
 -- or newly-added field is never silently withheld. The Snapshot/Comm encoders ask
--- this before emitting each field; the Privacy page (src/UI/Pages/Privacy.lua)
+-- this before emitting each field; the Settings tab (src/UI/SettingsTab.lua)
 -- flips the flags in ns.db.privacy.
 -- ---------------------------------------------------------------------------
 --- @param key string A privacy key (see DB_DEFAULTS.privacy).
@@ -273,7 +282,7 @@ SlashCmdList["BETTERTOGETHER"] = function(msg)
     if ns.Dashboard then ns.Dashboard.OpenTab("statistics") end
 
   elseif cmd == "privacy" then
-    if ns.Dashboard then ns.Dashboard.OpenTab("privacy") end
+    if ns.Dashboard then ns.Dashboard.OpenSettings() end
 
   elseif cmd == "invite" then
     if ns.Pairing then ns.Pairing.Invite(arg) end

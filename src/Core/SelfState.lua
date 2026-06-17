@@ -223,7 +223,7 @@ local function readGear(s)
 
   -- Empty sockets: sockets present (from item stats) minus gems slotted (link).
   local missing = 0
-  local getStats = (C_Item and C_Item.GetItemStats) or GetItemStats
+  local getStats = C_Item and C_Item.GetItemStats   -- bare GetItemStats global removed in 12.x
   for slot = FIRST_SLOT, LAST_SLOT do
     local link = GetInventoryItemLink("player", slot)
     if link and getStats then
@@ -341,7 +341,7 @@ ns:RegisterEvent("PLAYER_UPDATE_RESTING",       onStateEvent)
 ns:RegisterEvent("PLAYER_MONEY",                onStateEvent)
 ns:RegisterEvent("CHALLENGE_MODE_MAPS_UPDATE",  onStateEvent)
 ns:RegisterEvent("WEEKLY_REWARDS_UPDATE",       onStateEvent)
-ns:RegisterEvent("AVERAGE_ITEM_LEVEL_UPDATE",   onStateEvent)
+ns:RegisterEvent("PLAYER_AVG_ITEM_LEVEL_UPDATE", onStateEvent)
 
 -- Ask the M+ subsystem to populate keystone/map data after login.
 ns:RegisterEvent("PLAYER_ENTERING_WORLD", function()

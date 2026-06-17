@@ -140,7 +140,6 @@ end
 --- @param rows table Map of rowKey -> Row object.
 --- @param snap table Partner snapshot.
 function S.setRowValues(rows, snap)
-  local L = ns.L
   local db = ns.db
   -- A row the partner has hidden gets a neutral "Hidden" value (no red/green mark)
   -- so it reads as "no info shared" rather than a failed check.

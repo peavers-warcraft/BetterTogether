@@ -11,9 +11,7 @@ local Row = ns.UI.Row
 local L = ns.L
 
 local MODEL_W, MODEL_H = 280, 420
--- SECTION_GAP is 22 here (tighter than Theme.SECTION_GAP) — intentional for this
--- model-beside-columns layout.
-local SECTION_GAP, ROW_GAP, COL_GAP = 22, 6, 30
+local ROW_GAP, COL_GAP = 6, 30
 
 local function build(host)
   local f = CreateFrame("Frame", nil, host)
