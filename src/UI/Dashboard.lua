@@ -165,8 +165,12 @@ end
 -- when it toggles. Kept as a stable hook for callers (Settings, /bt lock).
 function Dashboard.ApplyLock() end
 function Dashboard.SetScale(s) ns.db.scale = s; ns.UI.Scaling.Apply() end
-function Dashboard.Show() shouldShow = true; if panel then panel:Show() end end
+-- Refresh after showing: while hidden, Refresh() early-outs, so the panel's content
+-- is stale on reopen and must be repainted now that it's visible.
+function Dashboard.Show() shouldShow = true; if panel then panel:Show(); Dashboard.Refresh() end end
 function Dashboard.Hide() shouldShow = false; if panel then panel:Hide() end end
+--- True when the panel exists and is visible. Used by the /bt perf diagnostic.
+function Dashboard.IsShown() return panel ~= nil and panel:IsShown() end
 function Dashboard.ApplyMode()
   if not panel then return end
   panel.collapseBtn:SetText(ns.db.expanded and "–" or "+")
@@ -230,6 +234,16 @@ end
 -- ---------------------------------------------------------------------------
 function Dashboard.Refresh()
   if not panel then return end
+  -- Hot path: state events (UNIT_AURA et al.), the 2s ticker, and every inbound
+  -- SNAP/CARD all call Refresh. Nothing it computes is visible while the panel is
+  -- hidden, so skip the whole context rebuild + page relayout then — otherwise a
+  -- raid's aura churn re-laid-out a closed window many times a second. Show() and the
+  -- tab/mode switches re-run a full Refresh when the panel reopens.
+  Dashboard._refreshCalls = (Dashboard._refreshCalls or 0) + 1
+  if not (shouldShow and panel:IsShown()) then
+    Dashboard._refreshSkipped = (Dashboard._refreshSkipped or 0) + 1
+    return
+  end
   local snap, verdict = getContext()
   ns.UI.Header.Update(snap, verdict)
   ns.UI.Presence.Notify(snap, verdict)

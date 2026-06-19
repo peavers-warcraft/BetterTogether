@@ -310,16 +310,38 @@ end
 -- ---------------------------------------------------------------------------
 -- Events -> recompute + (debounced) sends
 -- ---------------------------------------------------------------------------
-local function onStateEvent(event, unit)
-  if event == "UNIT_AURA" and unit ~= "player" then return end
-  if event == "UNIT_INVENTORY_CHANGED" and unit ~= "player" then return end
-
+-- Coalesce bursts of state events into one deferred recompute. UNIT_AURA (and
+-- friends) can fire many times in a single frame — especially in a raid — and each
+-- fire ran a full SelfState.Update (consumable/durability/bag/gear+gem scans) plus a
+-- dashboard refresh. We instead mark dirty and flush once on the next frame, so a
+-- burst costs a single recompute rather than one per event.
+local flushScheduled = false
+local lastSelfSig
+local function flushStateEvents()
+  flushScheduled = false
   SelfState.Update()
   if ns.Comm then
     ns.Comm.QueueSnapshot(false)
     ns.Comm.QueueCard(false)
   end
-  if ns.Dashboard and ns.Dashboard.Refresh then ns.Dashboard.Refresh() end
+  -- Only repaint when our own state actually changed. Update() no-ops in combat, so
+  -- the signature stays stable and the constant in-combat UNIT_AURA churn no longer
+  -- drives a per-frame dashboard relayout even with the window open.
+  local sig = SelfState.SnapSignature() .. "#" .. SelfState.CardSignature()
+  if sig ~= lastSelfSig then
+    lastSelfSig = sig
+    if ns.Dashboard and ns.Dashboard.Refresh then ns.Dashboard.Refresh() end
+  end
+end
+
+local function onStateEvent(event, unit)
+  if event == "UNIT_AURA" and unit ~= "player" then return end
+  if event == "UNIT_INVENTORY_CHANGED" and unit ~= "player" then return end
+  SelfState._events = (SelfState._events or 0) + 1   -- diagnostics: see /bt perf
+  if flushScheduled then return end
+  flushScheduled = true
+  SelfState._flushes = (SelfState._flushes or 0) + 1
+  C_Timer.After(0, flushStateEvents)
 end
 
 -- SNAP-relevant
