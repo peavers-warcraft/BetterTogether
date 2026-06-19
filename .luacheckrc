@@ -25,5 +25,7 @@ for _, g in ipairs({
   "BetterTogetherCharDB",      -- SavedVariablesPerCharacter
   "SLASH_BETTERTOGETHER1",
   "SLASH_BETTERTOGETHER2",
+  "SLASH_BETTERTOGETHER3",
+  "SLASH_BETTERTOGETHER4",
   "StaticPopupDialogs",        -- we register StaticPopupDialogs["BETTERTOGETHER_INVITE"]
 }) do globals[#globals + 1] = g end
