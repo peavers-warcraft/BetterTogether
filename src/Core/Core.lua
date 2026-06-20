@@ -256,10 +256,66 @@ ns:RegisterEvent("ADDON_LOADED", onAddonLoaded)
 ns:RegisterEvent("PLAYER_LOGIN", onPlayerLogin)
 
 -- ---------------------------------------------------------------------------
+-- /bt perf — objective verification for the load/FPS work. Micro-benchmarks the
+-- hot paths with debugprofilestop() (per-call avg ms) and reports the live counters
+-- that prove the two structural fixes are doing their job:
+--   * Dashboard.Refresh skips the full relayout while the panel is hidden — so the
+--     hidden cost should be ~0ms, and in real play _refreshSkipped climbs while
+--     _refreshCalls happen with the window closed (e.g. a raid's UNIT_AURA churn).
+--   * SelfState coalesces event bursts — _events >> _flushes means many events in a
+--     frame collapsed to one recompute.
+-- Results are also stored in BetterTogetherDB.perf so they can be read back from
+-- SavedVariables after a session.
+-- ---------------------------------------------------------------------------
+local function runPerf()
+  if not debugprofilestop then ns:Print("perf: debugprofilestop unavailable"); return end
+  local N = 100
+  local function bench(fn)
+    local t0 = debugprofilestop()
+    for _ = 1, N do fn() end
+    return (debugprofilestop() - t0) / N
+  end
+
+  local D, res = ns.Dashboard, {}
+  -- Snapshot the real-play counters BEFORE benching (the benchmark calls Refresh
+  -- itself, which would otherwise inflate these).
+  res.refreshCalls   = (D and D._refreshCalls) or 0
+  res.refreshSkipped = (D and D._refreshSkipped) or 0
+  res.events  = (ns.SelfState and ns.SelfState._events)  or 0
+  res.flushes = (ns.SelfState and ns.SelfState._flushes) or 0
+
+  if D and D.Refresh then
+    local wasShown = D.IsShown and D.IsShown()
+    D.Hide();  res.refreshHiddenMs = bench(D.Refresh)   -- guarded: should be ~0ms
+    D.Show();  res.refreshShownMs  = bench(D.Refresh)   -- full relayout (only paid when visible)
+    if not wasShown then D.Hide() end
+  end
+  if ns.SelfState and ns.SelfState.Update then res.selfUpdateMs = bench(ns.SelfState.Update) end
+  res.fps      = GetFramerate and math.floor(GetFramerate() or 0) or 0
+  res.inCombat = ns:InCombat()
+  ns.db.perf = res
+
+  ns:Print("|cff66ccffperf|r (avg ms/call over " .. N .. "):")
+  ns:Print(string.format("  Dashboard.Refresh  hidden=|cffffff00%.4f|r  shown=|cffffff00%.4f|r ms",
+    res.refreshHiddenMs or -1, res.refreshShownMs or -1))
+  ns:Print(string.format("  SelfState.Update   |cffffff00%.4f|r ms   (fps=%d%s)",
+    res.selfUpdateMs or -1, res.fps, res.inCombat and ", in combat" or ""))
+  ns:Print(string.format("  Refresh calls=%d skipped-while-hidden=%d   StateEvents=%d flushes=%d",
+    res.refreshCalls, res.refreshSkipped, res.events, res.flushes))
+  ns:Print("  saved to |cffffff00BetterTogetherDB.perf|r")
+end
+
+-- ---------------------------------------------------------------------------
 -- Slash commands
 -- ---------------------------------------------------------------------------
+-- NOTE: "/bt" collides with Bartender4 (a very common addon), which registers the
+-- same token via AceConsole and silently swallows our commands when both are loaded.
+-- Keep "/bt" for users without Bartender4, but also expose collision-free aliases so
+-- the short form always works.
 SLASH_BETTERTOGETHER1 = "/bettertogether"
 SLASH_BETTERTOGETHER2 = "/bt"
+SLASH_BETTERTOGETHER3 = "/btog"
+SLASH_BETTERTOGETHER4 = "/bett"
 SlashCmdList["BETTERTOGETHER"] = function(msg)
   local L = ns.L
   msg = (msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
@@ -370,6 +426,9 @@ SlashCmdList["BETTERTOGETHER"] = function(msg)
   elseif cmd == "scaleinfo" then
     if ns.UI.Scaling and ns.UI.Scaling.PrintScaleInfo then ns.UI.Scaling.PrintScaleInfo() end
 
+  elseif cmd == "perf" then
+    runPerf()
+
   elseif cmd == "help" or cmd == "" and false then
     -- (falls through to default below)
 
@@ -382,7 +441,7 @@ SlashCmdList["BETTERTOGETHER"] = function(msg)
       ns:Print("  |cffffff00/bt partners|r — " .. L["list saved partners"] .. "   |cffffff00/bt switch <name>|r — " .. L["make one active"])
       ns:Print("  |cffffff00/bt unpair|r · |cffffff00/bt sync|r · |cffffff00/bt lock|r · |cffffff00/bt show|r/|cffffff00hide|r · |cffffff00/bt reset|r")
       ns:Print("  |cffffff00/bt privacy|r — " .. L["choose what to share with your partner"])
-      ns:Print("  |cffffff00/bt test|r (loopback) · |cffffff00/bt selftest|r · |cffffff00/bt toast|r · |cffffff00/bt auras|r · |cffffff00/bt debug|r · |cffffff00/bt|r (" .. L["options"] .. ")")
+      ns:Print("  |cffffff00/bt test|r (loopback) · |cffffff00/bt selftest|r · |cffffff00/bt toast|r · |cffffff00/bt auras|r · |cffffff00/bt debug|r · |cffffff00/bt perf|r · |cffffff00/bt|r (" .. L["options"] .. ")")
     end
   end
 end

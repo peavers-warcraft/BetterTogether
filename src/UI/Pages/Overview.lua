@@ -37,11 +37,18 @@ local function build(host)
   local model = CreateFrame("PlayerModel", nil, mb)
   model:SetPoint("TOPLEFT", mb, "TOPLEFT", 5, -5); model:SetPoint("BOTTOMRIGHT", mb, "BOTTOMRIGHT", -5, 5)
   model:EnableMouse(true); model:EnableMouseWheel(true)
-  model:SetScript("OnMouseDown", function(self, btn) if btn == "LeftButton" then self.rotating = true; self.cx = GetCursorPosition(); self.sf = self.facing or 0 end end)
-  model:SetScript("OnMouseUp", function(self) self.rotating = false end)
-  model:SetScript("OnUpdate", function(self)
-    if self.rotating then local x = GetCursorPosition(); self.facing = (self.sf or 0) + (x - self.cx) * 0.012; self:SetFacing(self.facing) end
+  -- Drag-to-rotate. The OnUpdate is installed only for the duration of a drag and
+  -- removed on mouse-up, so an idle (but shown) model costs zero per-frame work.
+  local function onRotate(self)
+    local x = GetCursorPosition(); self.facing = (self.sf or 0) + (x - self.cx) * 0.012; self:SetFacing(self.facing)
+  end
+  model:SetScript("OnMouseDown", function(self, btn)
+    if btn == "LeftButton" then
+      self.cx = GetCursorPosition(); self.sf = self.facing or 0
+      self:SetScript("OnUpdate", onRotate)
+    end
   end)
+  model:SetScript("OnMouseUp", function(self) self:SetScript("OnUpdate", nil) end)
   model:SetScript("OnMouseWheel", function(self, d) self.zoom = math.min(1, math.max(0, (self.zoom or 0) + d * 0.1)); self:SetPortraitZoom(self.zoom) end)
   f.model = model
 
