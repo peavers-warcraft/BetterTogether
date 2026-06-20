@@ -46,6 +46,51 @@ local function partnerTarget()
 end
 
 -- ---------------------------------------------------------------------------
+-- Offline-whisper error suppression
+-- ---------------------------------------------------------------------------
+-- Whispering an addon message to an *offline* player makes the client print
+-- ERR_CHAT_PLAYER_NOT_FOUND_S ("No player named '%s' is currently playing.").
+-- Our reconnect probes (and BYE/PING) whisper the partner whether or not they
+-- are online, so an offline partner spams chat with this line. Addon-whisper
+-- failures report an EMPTY recipient name (the client doesn't echo it back), so
+-- "No player named '' is currently playing." can ONLY be ours — a human /w to a
+-- missing player always carries the typed name. We swallow that empty-name form,
+-- plus (within a short grace window) the exact names we just whispered, and leave
+-- the user's own offline-whisper errors untouched.
+local NOTFOUND_GRACE = 5                  -- seconds a whispered name stays suppressible
+local recentWhisper = {}                  -- shortName:lower() -> GetTime() the suppression expires
+
+-- Keyed on the SHORT name: we whisper the full "Name-Realm", but the client echoes
+-- only the short name back in ERR_CHAT_PLAYER_NOT_FOUND_S, so both sides normalize
+-- to short form to match.
+local function noteWhisper(target)
+  local short = target and ns.Util.ShortName(target)
+  if not short or short == "" then return end
+  recentWhisper[short:lower()] = GetTime() + NOTFOUND_GRACE
+end
+
+local notFoundPattern
+do
+  local fmt = ERR_CHAT_PLAYER_NOT_FOUND_S or "No player named '%s' is currently playing."
+  local pat = fmt:gsub("%%s", "\1")                                    -- park the name slot
+  pat = pat:gsub("([%^%$%(%)%.%[%]%*%+%-%?%%])", "%%%1")               -- escape Lua magic
+  pat = pat:gsub("\1", "(.-)")                                         -- restore as a capture
+  notFoundPattern = "^" .. pat .. "$"
+end
+
+-- Returns true to suppress the chat line. Signature is (self, event, msg, ...).
+local function systemErrorFilter(_, _, msg)
+  if type(msg) ~= "string" then return false end
+  local name = msg:match(notFoundPattern)
+  if not name then return false end
+  if name == "" then return true end                  -- addon-whisper failure: always ours
+  local short = ns.Util.ShortName(name) or name
+  local exp = recentWhisper[short:lower()]
+  if exp and GetTime() <= exp then return true end
+  return false
+end
+
+-- ---------------------------------------------------------------------------
 -- Token-bucket outbound queue. Entries are { text=, target= }.
 -- ---------------------------------------------------------------------------
 local bucket = { tokens = 10, max = 10 }
@@ -60,6 +105,10 @@ local function rawSend(entry)
   elseif target then
     channel = "WHISPER"
   end
+
+  -- Arm the offline-error suppressor before the whisper goes out: if `target` is
+  -- offline the client emits ERR_CHAT_PLAYER_NOT_FOUND_S synchronously here.
+  if channel == "WHISPER" then noteWhisper(target) end
 
   local result = C_ChatInfo.SendAddonMessage(ns.PREFIX, entry.text, channel, target)
   if result == nil or result == true then return true end
@@ -428,6 +477,12 @@ local function dispatch(text, senderShort, trusted)
     local full = ns.Pairing and ns.Pairing.InRoster(senderShort)
     if full then
       local appeared = markSeen(senderShort)
+      -- A heartbeat from our *active* partner doubles as a live-link keepalive:
+      -- it refreshes lastSeen so a combat-silenced (or idle) partner won't age past
+      -- OFFLINE_AFTER. We only refresh an existing link — establishing one still
+      -- goes through HELLO, so a real (re)connect pulls a fresh snapshot rather than
+      -- showing the partner "online" with stale data.
+      if ns.state.linked and ns.Pairing.IsBonded(senderShort) then markLinked() end
       if mtype == MSG.PING then Comm.WhisperTo(full, MSG.PONG) end
       if appeared and ns.Dashboard then ns.Dashboard.Refresh() end
     end
@@ -630,20 +685,28 @@ local function onLogout()
 end
 
 function Comm.Init()
+  -- Swallow the "No player named '...' is currently playing." spam our offline
+  -- reconnect probes generate (see noteWhisper / systemErrorFilter above).
+  if ChatFrame_AddMessageEventFilter then
+    ChatFrame_AddMessageEventFilter("CHAT_MSG_SYSTEM", systemErrorFilter)
+  end
+
   C_Timer.NewTicker(RECONNECT_INTERVAL, function()
     if not (ns.Pairing and ns.Pairing.PartnerName()) then return end
     if ns.state.linked then
       -- Linked: watch for the partner going quiet. A logout BYE can be dropped, so
-      -- silence is our backstop signal. A short gap just earns a nudge — an online
-      -- but idle partner answers and stays linked — while silence past OFFLINE_AFTER
-      -- means they've logged off, so we drop the live link (the dashboard flips to
-      -- "offline" and we stop streaming data at them). Reconnect resumes below.
+      -- silence is our backstop signal — but SNAP/CARD/HELLO are gated off during
+      -- combat (and don't fire when nothing's changed), so an in-combat or idle
+      -- partner would otherwise age out and false-trip "went offline". Each tick we
+      -- send a PING heartbeat instead: it bypasses the combat gate and the PONG
+      -- bumps lastSeen on both sides, so only a real logoff (no PONG for
+      -- OFFLINE_AFTER) drops the live link and flips the dashboard to offline.
       local since = GetTime() - ((ns.state.partner and ns.state.partner.lastSeen) or 0)
       if since > ns.OFFLINE_AFTER then
         softUnlink("partner silent past offline cutoff")
-      elseif since > RECONNECT_INTERVAL then
-        ns:Debug("partner quiet, nudging")
-        Comm.SendHello()
+      else
+        local partner = partnerTarget()
+        if partner then Comm.WhisperTo(partner, MSG.PING) end
       end
     else
       ns:Debug("reconnect: pinging partner")
