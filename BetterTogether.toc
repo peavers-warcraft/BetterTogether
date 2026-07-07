@@ -13,9 +13,10 @@
 ## X-Source-Code: https://github.com/peavers-warcraft/BetterTogether
 ## X-Curse-Project-ID: 1577596
 
+## Dependencies: PeaversConsumablesData
+
 ## SavedVariables: BetterTogetherDB
 ## SavedVariablesPerCharacter: BetterTogetherCharDB
-## OptionalDeps: PeaversConsumablesData
 
 Changelog.lua
 

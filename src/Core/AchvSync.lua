@@ -70,10 +70,10 @@ end
 -- thousands of entries, so the scan is spread across frames: `onWork` (if given)
 -- is called every ACHV_BATCH achievements, letting an async driver yield. Pass
 -- nil for a blocking scan. Entry: { id, y, m, d }.
--- Kept modest so each pumped frame does little work: the scan is normally pre-warmed
--- in the background shortly after login (Core), so a slightly longer wall-clock scan
--- is invisible — what matters is that no single frame hitches.
-local ACHV_BATCH = 100
+-- Kept small so the pump's per-frame TIME budget (see Ensure) gets checked often
+-- enough to cut a slice off mid-category; this count only sets yield granularity,
+-- the pump decides how much actually runs per frame.
+local ACHV_BATCH = 25
 local function sweep(onWork)
   local byEra, seen = {}, {}
   if not (GetCategoryList and GetCategoryNumAchievements and GetAchievementInfo) then return byEra end
@@ -124,29 +124,33 @@ function AchvSync.Ensure(onReady)
     cache = sweep(nil); flushWaiters(); return         -- no async primitives: scan inline
   end
   scanCo = coroutine.create(function() return sweep(coroutine.yield) end)
-  scanTicker = C_Timer.NewTicker(0, function()
-    local ok, ret = coroutine.resume(scanCo)
-    if not ok then
-      ns:Debug("AchvSync scan error: " .. tostring(ret))
-      cache = {}
-    elseif coroutine.status(scanCo) ~= "dead" then
-      return                                            -- still scanning; resume next frame
-    else
-      cache = ret or {}
-    end
-    -- scanTicker is always set before this callback first runs (NewTicker schedules for
-    -- a later frame), so the :Cancel() is safe despite the upvalue being nil-able.
-    ---@diagnostic disable-next-line: need-check-nil
-    scanTicker:Cancel(); scanTicker, scanCo = nil, nil
-    flushWaiters()
-  end)
+  -- Time-budgeted pump (ns.PumpCoroutine): the old one-100-item-slice-per-frame
+  -- scheme spent whatever those items cost — several ms on a big achievement DB —
+  -- every frame for the whole sweep, which read as a seconds-long FPS dip right
+  -- after /reload. Slice stats are kept for /bt perf so the fix stays verifiable
+  -- in-client.
+  local stats = { frames = 0, totalMs = 0, maxMs = 0 }
+  AchvSync._scanStats = stats
+  scanTicker = ns.PumpCoroutine(scanCo, {
+    budgetMs = 1.5,
+    stats = stats,
+    onDone = function(ok, ret)
+      if not ok then ns:Debug("AchvSync scan error: " .. tostring(ret)) end
+      cache = (ok and ret) or {}
+      scanTicker, scanCo = nil, nil
+      flushWaiters()
+    end,
+  })
 end
 
 function AchvSync.All() return cache or {} end
 
 function AchvSync.Invalidate()
   cache = nil
-  if scanTicker then scanTicker:Cancel(); scanTicker, scanCo = nil, nil end
+  if scanTicker then
+    scanTicker:Cancel(); scanTicker, scanCo = nil, nil
+    AchvSync._scanStats = nil   -- partial-sweep stats would misread as a full scan's cost in /bt perf
+  end
   if #waiters > 0 then                                 -- a consumer is still waiting: rescan now
     local w = waiters; waiters = {}
     for _, cb in ipairs(w) do AchvSync.Ensure(cb) end

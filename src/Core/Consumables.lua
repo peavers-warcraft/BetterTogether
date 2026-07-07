@@ -5,12 +5,11 @@
   These are AURA spellIDs (the buff applied), NOT item IDs. Many flasks/foods use
   a single shared buff spellID across ranks, so a small table covers a whole tier.
 
-  [VERIFY IN-CLIENT] (spec §11.4): the spellIDs below are placeholders / known
-  values from prior tiers and SHOULD be confirmed for the current Midnight 12.0
-  tier in-client. Run `/bt auras` with a flask/food/rune active to read the live
-  spellIds, then add them here. Pinned IDs are the precise path — but detection no
-  longer depends on them: ScanPlayer also matches the stable buff *names* (NAME_HINTS
-  below), so flask/food/rune are caught out of the box even before the IDs are pinned.
+  The live per-tier data comes from PeaversConsumablesData (hard dependency),
+  imported at PLAYER_LOGIN — see the import section at the bottom. The hardcoded
+  lists below are only seeds/fallbacks so detection isn't empty if the data addon
+  ever ships without a category. ScanPlayer additionally matches stable buff
+  *names* (NAME_HINTS below) as a last-resort tier-proof net.
 ]]
 
 local addonName, ns = ...
@@ -26,8 +25,7 @@ ns.Consumables = Consumables
 
 -- Flasks / phials (the long-duration primary-stat consumable).
 local FLASK_IDS = {
-  -- TODO[VERIFY IN-CLIENT]: Midnight 12.0 flask/phial buff spellIDs.
-  -- Examples from prior tiers kept as fallbacks so detection isn't empty:
+  -- Fallback seeds only — live tier IDs are imported from PeaversConsumablesData:
   431971,  -- Flask of Tempered Versatility (TWW placeholder)
   431972,  -- Flask of Tempered Swiftness
   431973,  -- Flask of Tempered Mastery
@@ -37,7 +35,8 @@ local FLASK_IDS = {
 
 -- Well Fed / food buffs. A single "Well Fed" aura often covers many foods.
 local FOOD_IDS = {
-  -- TODO[VERIFY IN-CLIENT]: Midnight 12.0 Well Fed buff spellIDs.
+  -- Well Fed aura IDs aren't derivable from item data (the item's use-spell is
+  -- the eating channel, not the buff), so food detection leans on NAME_HINTS:
   462210,  -- Well Fed (feast, TWW placeholder)
   461957,  -- Well Fed (stat food placeholder)
   104280,  -- Generic "Well Fed" fallback (older shared id)
@@ -45,7 +44,7 @@ local FOOD_IDS = {
 
 -- Augment runes (the per-character augment buff).
 local RUNE_IDS = {
-  -- TODO[VERIFY IN-CLIENT]: Midnight 12.0 augment rune buff spellID.
+  -- Fallback seeds only — live tier IDs are imported from PeaversConsumablesData:
   453250,  -- Crystallized Augment Rune (TWW placeholder)
   393438,  -- Draconic Augment Rune (prior tier fallback)
 }
@@ -66,6 +65,14 @@ local NAME_HINTS = {
   food  = { "Well Fed" },
   flask = { "Flask", "Phial" },
   rune  = { "Augment Rune", "Augmented" },
+}
+
+-- Exact aura names imported from PeaversConsumablesData at login. GetItemSpell
+-- returns the client-locale spell name, so unlike the enUS NAME_HINTS these
+-- exact matches work on any locale.
+local EXACT_NAMES = {
+  flask = {},
+  rune  = {},
 }
 
 local function nameMatches(name, hints)
@@ -144,8 +151,8 @@ function Consumables.ScanPlayer()
     local name = aura.name
     if type(name) == "string" and not isSecret(name) and name ~= "" then
       if not found.food  and nameMatches(name, NAME_HINTS.food)  then hit("food")  end
-      if not found.flask and nameMatches(name, NAME_HINTS.flask) then hit("flask") end
-      if not found.rune  and nameMatches(name, NAME_HINTS.rune)  then hit("rune")  end
+      if not found.flask and (EXACT_NAMES.flask[name] or nameMatches(name, NAME_HINTS.flask)) then hit("flask") end
+      if not found.rune  and (EXACT_NAMES.rune[name]  or nameMatches(name, NAME_HINTS.rune))  then hit("rune")  end
     end
   end
 
@@ -168,19 +175,18 @@ end
 
 -- ---------------------------------------------------------------------------
 -- Supply stock (bag item counts) for the gear/supplies dashboard section.
--- [VERIFY IN-CLIENT] (§11.4): item IDs are current/known placeholders; confirm.
+-- Potion/food item IDs are extended from PeaversConsumablesData at login; the
+-- entries below are fallback seeds.
 -- ---------------------------------------------------------------------------
 local POTION_IDS = {
-  -- combat potions (healing + primary-stat) — TODO confirm Midnight tier IDs
-  211880,  -- Algari Healing Potion (TWW placeholder)
-  212265,  -- Tempered Potion (TWW placeholder)
+  211880,  -- Algari Healing Potion (TWW seed)
+  212265,  -- Tempered Potion (TWW seed)
 }
 local HEALTHSTONE_IDS = {
   5512,    -- Healthstone (long-stable item id)
 }
 local FEAST_IDS = {
-  -- portable food / feasts the player might carry — TODO confirm
-  222732,  -- placeholder feast
+  222732,  -- feast seed (TWW)
 }
 
 local function sumCount(ids)
@@ -196,5 +202,116 @@ end
 function Consumables.CountSupplies()
   return sumCount(POTION_IDS), sumCount(HEALTHSTONE_IDS), sumCount(FEAST_IDS)
 end
+
+-- ---------------------------------------------------------------------------
+-- PeaversConsumablesData import (hard dependency, so it loads before us).
+-- The data addon publishes curated per-spec item lists (itemID/itemName) that
+-- are regenerated every patch, so detection tracks the live tier instead of
+-- the hand-pinned seeds above. The lists are ITEM ids; we bridge to aura
+-- spellIDs via GetItemSpell: for flasks/phials and augment runes the item's
+-- use-spell IS the applied buff (same id and name). Food is skipped for aura
+-- purposes (its use-spell is the eating channel, not "Well Fed" — NAME_HINTS
+-- covers that) but feeds the supplies count, as do potions.
+-- ---------------------------------------------------------------------------
+
+local GetItemSpell = C_Item and C_Item.GetItemSpell
+
+local function forEachSpecID(classID, fn)
+  -- Split homes in 12.0.7 (per wow-api's 120007 dump): GetNumSpecializationsForClassID
+  -- moved onto C_SpecializationInfo, but GetSpecializationInfoForClassID is still a
+  -- bare global. Check both homes for each so the import survives either migrating.
+  local getNum  = (C_SpecializationInfo and C_SpecializationInfo.GetNumSpecializationsForClassID)
+      or GetNumSpecializationsForClassID
+  local getInfo = (C_SpecializationInfo and C_SpecializationInfo.GetSpecializationInfoForClassID)
+      or GetSpecializationInfoForClassID
+  if not (getNum and getInfo) then return end
+  for i = 1, getNum(classID) or 0 do
+    local specID = getInfo(classID, i)
+    if specID then fn(specID) end
+  end
+end
+
+-- Resolve an item's use-spell to an aura id + localized name. Item data is
+-- server-side and usually cold at login, so resolve after the async item load;
+-- the sets mutate in place and the next UNIT_AURA rescan picks them up.
+local function addAuraFromItem(itemID, cat)
+  if not GetItemSpell then return end   -- nothing to resolve with; skip the item request too
+  local function resolve()
+    local spellName, spellID = GetItemSpell(itemID)
+    if spellID then Consumables[cat][spellID] = true end
+    if type(spellName) == "string" and spellName ~= "" then
+      EXACT_NAMES[cat][spellName] = true   -- cat is always "flask" or "rune" (see handlers)
+    end
+    -- Cold-cache items resolve after the import pump has finished, so poke the
+    -- (coalesced) rescan from here too — a flask active at login must not wait
+    -- for the next organic UNIT_AURA to be detected.
+    if ns.SelfState and ns.SelfState.MarkDirty then ns.SelfState.MarkDirty() end
+  end
+  if Item and Item.CreateFromItemID then
+    local item = Item:CreateFromItemID(itemID)
+    if not item:IsItemEmpty() then
+      item:ContinueOnItemLoad(resolve)
+      return
+    end
+  end
+  resolve()
+end
+
+local function ImportConsumablesData()
+  local data = rawget(_G, "PeaversConsumablesData")
+  local API = data and data.API
+  if not (API and API.GetConsumables) then return end
+
+  -- Union across every class/spec: flasks aren't class-locked and a player may
+  -- run an off-spec (or cheaper) consumable, so detection shouldn't care whose
+  -- "best list" an item came from.
+  local seen = {}
+  for _, id in ipairs(POTION_IDS) do seen[id] = true end
+  for _, id in ipairs(FEAST_IDS)  do seen[id] = true end
+
+  local handlers = {
+    flasks  = function(id) addAuraFromItem(id, "flask") end,
+    runes   = function(id) addAuraFromItem(id, "rune") end,
+    potions = function(id) POTION_IDS[#POTION_IDS + 1] = id end,
+    food    = function(id) FEAST_IDS[#FEAST_IDS + 1] = id end,
+  }
+
+  local function importClass(classID)
+    forEachSpecID(classID, function(specID)
+      for category, handle in pairs(handlers) do
+        local items = API.GetConsumables(classID, specID, category)
+        if items then
+          for _, item in ipairs(items) do
+            local id = item.itemID
+            if id and not seen[id] then
+              seen[id] = true
+              handle(id)
+            end
+          end
+        end
+      end
+    end)
+  end
+
+  -- One class per pumped frame instead of all in one login hit — each slice is
+  -- small (a dozen GetConsumables calls), but at /reload every addon competes for
+  -- the same frames, so stay polite. Detection is name-hint-covered until the
+  -- import lands, so the spread is safe.
+  local numClasses = (GetNumClasses and GetNumClasses()) or 13
+  local co = coroutine.create(function()
+    for classID = 1, numClasses do importClass(classID); coroutine.yield() end
+  end)
+  ns.PumpCoroutine(co, {
+    onDone = function(ok, err)
+      if not ok then ns:Debug("Consumables import error: " .. tostring(err)) end
+      -- The lookup sets just changed under the login-time scan. Recompute + resync
+      -- through the normal coalescing path so a flask/rune that was already active
+      -- at login is reported correctly now, not on the next organic UNIT_AURA.
+      if ns.SelfState and ns.SelfState.MarkDirty then ns.SelfState.MarkDirty() end
+    end,
+  })
+end
+
+ns:RegisterEvent("PLAYER_LOGIN", ImportConsumablesData)
 
 return Consumables

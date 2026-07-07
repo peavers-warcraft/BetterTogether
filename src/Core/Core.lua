@@ -183,6 +183,59 @@ frame:SetScript("OnEvent", function(_, event, ...)
 end)
 
 -- ---------------------------------------------------------------------------
+-- Budgeted coroutine pump — the shared engine for spreading background work
+-- (AchvSync's achievement sweep, the Consumables data import) across frames.
+-- Resumes `co` repeatedly each frame until ~budgetMs of that frame is spent,
+-- then hands the frame back: the visible cost is a constant sliver of a 60fps
+-- frame (16.7ms) for however many frames the job needs. A fixed per-frame item
+-- count (the old scheme) hitches on slow CPUs and crawls on fast ones; a ms
+-- budget does neither. The coroutine sets its own yield granularity — yield
+-- often enough that the budget check can cut a slice off mid-loop.
+-- opts:
+--   budgetMs  per-frame time budget (default 1.5)
+--   stats     optional { frames=0, totalMs=0, maxMs=0 } filled in for /bt perf
+--   onDone    called once with (ok, ret): ok=false means the coroutine errored
+--             and ret is the error; otherwise ret is the coroutine's return.
+-- Returns a handle with :Cancel(). Without C_Timer the job runs to completion
+-- inline (blocking) so callers never need their own fallback.
+-- ---------------------------------------------------------------------------
+function ns.PumpCoroutine(co, opts)
+  opts = opts or {}
+  local budget = opts.budgetMs or 1.5
+  local stats  = opts.stats
+
+  if not (C_Timer and C_Timer.NewTicker) then
+    local ok, ret
+    repeat ok, ret = coroutine.resume(co) until not ok or coroutine.status(co) == "dead"
+    if opts.onDone then opts.onDone(ok, ret) end
+    return { Cancel = function() end }
+  end
+
+  local ticker
+  ticker = C_Timer.NewTicker(0, function()
+    local t0 = debugprofilestop and debugprofilestop()
+    local done, jobOk, jobRet = false, true, nil
+    repeat
+      local ok, ret = coroutine.resume(co)
+      if not ok then
+        jobOk, jobRet, done = false, ret, true
+      elseif coroutine.status(co) == "dead" then
+        jobRet, done = ret, true
+      end
+    until done or not t0 or (debugprofilestop() - t0) >= budget
+    if t0 and stats then
+      local ms = debugprofilestop() - t0
+      stats.frames, stats.totalMs = stats.frames + 1, stats.totalMs + ms
+      if ms > stats.maxMs then stats.maxMs = ms end
+    end
+    if not done then return end
+    ticker:Cancel()
+    if opts.onDone then opts.onDone(jobOk, jobRet) end
+  end)
+  return ticker
+end
+
+-- ---------------------------------------------------------------------------
 -- Combat gate (§9: v1 never operates in combat)
 -- ---------------------------------------------------------------------------
 function ns:InCombat()
@@ -239,12 +292,25 @@ local function onAddonLoaded(_, loaded)
 end
 
 local function onPlayerLogin()
+  -- Time each login step once so /bt perf can show where a /reload hitch comes
+  -- from instead of guessing. PLAYER_LOGIN runs behind the loading screen, so
+  -- these steps lengthen the load a little rather than drop rendered frames —
+  -- but a step that balloons here is still the first place to look.
+  ns.loadTrace = {}
+  local function step(name, fn)
+    if not fn then return end
+    if not debugprofilestop then fn() return end
+    local t0 = debugprofilestop()
+    fn()
+    ns.loadTrace[#ns.loadTrace + 1] = string.format("%s=%.1fms", name, debugprofilestop() - t0)
+  end
+
   -- Build UI now that saved vars + media are available.
-  if ns.Dashboard and ns.Dashboard.Init then ns.Dashboard.Init() end
+  step("dashboard", ns.Dashboard and ns.Dashboard.Init)
 
   -- Compute our own state, then resume any saved pairing (whispers the partner).
-  if ns.SelfState and ns.SelfState.Update then ns.SelfState.Update() end
-  if ns.Pairing and ns.Pairing.Resume then ns.Pairing.Resume() end
+  step("selfstate", ns.SelfState and ns.SelfState.Update)
+  step("pairing",   ns.Pairing and ns.Pairing.Resume)
 
   -- Pre-warm the achievement scan in the background a few seconds after login (once
   -- the login burst has settled) so the Achievements tab opens to ready data instead of
@@ -306,6 +372,19 @@ local function runPerf()
     res.selfUpdateMs or -1, res.fps, res.inCombat and ", in combat" or ""))
   ns:Print(string.format("  Refresh calls=%d skipped-while-hidden=%d   StateEvents=%d flushes=%d",
     res.refreshCalls, res.refreshSkipped, res.events, res.flushes))
+  -- Load-path evidence: per-step login timings (recorded once at PLAYER_LOGIN) and
+  -- the achievement pre-warm's slice stats — maxSlice is the number that must stay
+  -- ~within its 1.5ms frame budget for /reload to be hitch-free.
+  if ns.loadTrace and #ns.loadTrace > 0 then
+    res.login = table.concat(ns.loadTrace, "  ")
+    ns:Print("  login: " .. res.login)
+  end
+  local scan = ns.AchvSync and ns.AchvSync._scanStats
+  if scan and scan.frames > 0 then
+    res.achvScan = string.format("%.0fms over %d frames, max slice %.2fms",
+      scan.totalMs, scan.frames, scan.maxMs)
+    ns:Print("  achv scan: " .. res.achvScan)
+  end
   ns:Print("  saved to |cffffff00BetterTogetherDB.perf|r")
 end
 
