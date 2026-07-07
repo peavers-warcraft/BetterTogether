@@ -142,10 +142,11 @@ end
 function S.setRowValues(rows, snap)
   local db = ns.db
   -- A row the partner has hidden gets a neutral "Hidden" value (no red/green mark)
-  -- so it reads as "no info shared" rather than a failed check.
-  local function set(key, label, value, ok)
+  -- so it reads as "no info shared" rather than a failed check. `shareKey` overrides
+  -- the privacy key when it differs from the row key (enchants/gems ride under "gear").
+  local function set(key, label, value, ok, shareKey)
     if not (db.show[key] and rows[key]) then return end
-    if not ns.PartnerShares(key) then
+    if not ns.PartnerShares(shareKey or key) then
       rows[key]:Set(label, L["Hidden"], nil, Theme.SUBHEADER_COLOR)
     else
       rows[key]:Set(label, value, ok)
@@ -159,6 +160,17 @@ function S.setRowValues(rows, snap)
   set("wpn", L["Weapon oil"], buffValue(snap.wpn, snap.wpnr, at), snap.wpn)
   set("rune", L["Aug rune"], buffValue(snap.rune, snap.runer, at), snap.rune)
   set("bags", L["Bag space"], (snap.bags or 0) .. L[" free"], (snap.bags or 0) > 0)
+  -- Gear quality rows: enchMask/gemMiss arrive via the CARD message (privacy key
+  -- "gear") but live on the same merged partner table as the SNAP fields.
+  local enchMiss = 0
+  for i = 1, #ns.Snapshot.ENCHANT_SLOTS do
+    if bit.band(snap.enchMask or 0, 2 ^ (i - 1)) ~= 0 then enchMiss = enchMiss + 1 end
+  end
+  set("enchants", L["Enchants"],
+    enchMiss > 0 and (enchMiss .. L[" missing"]) or L["complete"], enchMiss == 0, "gear")
+  set("gems", L["Gem sockets"],
+    (snap.gemMiss or 0) > 0 and ((snap.gemMiss or 0) .. L[" empty"]) or L["all filled"],
+    (snap.gemMiss or 0) == 0, "gear")
 end
 
 -- ---------------------------------------------------------------------------

@@ -54,6 +54,8 @@ local DB_DEFAULTS = {
     bags          = "blocking",
     wpn           = "advisory",
     rune          = "advisory",
+    enchants      = "advisory",
+    gems          = "advisory",
     questMismatch = "advisory",
   },
   -- Which rows are visible in the dashboard.
@@ -64,6 +66,8 @@ local DB_DEFAULTS = {
     wpn        = true,
     rune       = true,
     bags       = true,
+    enchants   = true,
+    gems       = true,
     quest      = true,
   },
   -- Privacy: which data we broadcast to the partner. Every key defaults to true
@@ -419,6 +423,10 @@ SlashCmdList["BETTERTOGETHER"] = function(msg)
         color = V and V.ready, sound = SOUNDKIT and SOUNDKIT.READY_CHECK })
     end
 
+  elseif cmd == "gear" then
+    -- Diagnostic: show exactly which slots the enchant/socket scan flags.
+    if ns.SelfState and ns.SelfState.DumpGear then ns.SelfState.DumpGear() end
+
   elseif cmd == "debug" then
     ns.db.debug = not ns.db.debug
     ns:Print("debug " .. (ns.db.debug and "ON" or "OFF"))
@@ -441,7 +449,7 @@ SlashCmdList["BETTERTOGETHER"] = function(msg)
       ns:Print("  |cffffff00/bt partners|r — " .. L["list saved partners"] .. "   |cffffff00/bt switch <name>|r — " .. L["make one active"])
       ns:Print("  |cffffff00/bt unpair|r · |cffffff00/bt sync|r · |cffffff00/bt lock|r · |cffffff00/bt show|r/|cffffff00hide|r · |cffffff00/bt reset|r")
       ns:Print("  |cffffff00/bt privacy|r — " .. L["choose what to share with your partner"])
-      ns:Print("  |cffffff00/bt test|r (loopback) · |cffffff00/bt selftest|r · |cffffff00/bt toast|r · |cffffff00/bt auras|r · |cffffff00/bt debug|r · |cffffff00/bt perf|r · |cffffff00/bt|r (" .. L["options"] .. ")")
+      ns:Print("  |cffffff00/bt test|r (loopback) · |cffffff00/bt selftest|r · |cffffff00/bt toast|r · |cffffff00/bt auras|r · |cffffff00/bt gear|r · |cffffff00/bt debug|r · |cffffff00/bt perf|r · |cffffff00/bt|r (" .. L["options"] .. ")")
     end
   end
 end

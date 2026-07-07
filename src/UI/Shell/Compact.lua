@@ -31,7 +31,7 @@ local function buildCompact(parent)
   t.idFS = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight"); t.idFS:SetJustifyH("LEFT")
   t.ilvlFS = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal"); t.ilvlFS:SetJustifyH("RIGHT")
   t.rows = {}
-  for _, key in ipairs({ "durability", "flask", "food", "wpn", "rune", "bags" }) do
+  for _, key in ipairs({ "durability", "flask", "food", "wpn", "rune", "bags", "enchants", "gems" }) do
     t.rows[key] = Row.Create(parent, Theme.ICON[key])
   end
   t.sep = parent:CreateTexture(nil, "ARTWORK"); t.sep:SetColorTexture(1, 1, 1, 0.08); t.sep:SetHeight(1)
@@ -68,7 +68,7 @@ function Compact.Layout(snap, r, g, b)
 
   S.setRowValues(c.rows, snap)
   local anchor, count = c.idFS, 0
-  for _, key in ipairs({ "durability", "flask", "food", "wpn", "rune", "bags" }) do
+  for _, key in ipairs({ "durability", "flask", "food", "wpn", "rune", "bags", "enchants", "gems" }) do
     local row = c.rows[key]
     if ns.db.show[key] then
       row:SetShown(true); row:SetWidth(W - 2 * PAD)

@@ -15,6 +15,7 @@
 
 ## SavedVariables: BetterTogetherDB
 ## SavedVariablesPerCharacter: BetterTogetherCharDB
+## OptionalDeps: PeaversConsumablesData
 
 Changelog.lua
 
@@ -48,6 +49,7 @@ src\UI\Shell\EmptyState.lua
 src\UI\Dashboard.lua
 src\UI\SettingsTab.lua
 src\UI\Pages\Overview.lua
+src\UI\Pages\Gear.lua
 src\UI\Pages\Statistics.lua
 src\UI\Pages\Achievements.lua
 src\UI\Pages\Quests.lua
