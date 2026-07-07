@@ -482,6 +482,11 @@ local function onStateEvent(event, unit)
   C_Timer.After(0, flushStateEvents)
 end
 
+-- Public poke for non-event callers (e.g. the Consumables data import landing
+-- after login): mark state dirty through the same coalescing path game events use,
+-- so recompute + partner resync + repaint all happen exactly once per burst.
+function SelfState.MarkDirty() onStateEvent("BT_MARK_DIRTY") end
+
 -- SNAP-relevant
 ns:RegisterEvent("UPDATE_INVENTORY_DURABILITY", onStateEvent)
 ns:RegisterEvent("BAG_UPDATE_DELAYED",          onStateEvent)
@@ -509,12 +514,16 @@ ns:RegisterEvent("PLAYER_ENTERING_WORLD", function()
   if C_MythicPlus and C_MythicPlus.RequestMapInfo then pcall(C_MythicPlus.RequestMapInfo) end
 end)
 
--- Poll position; sync a fresh card only when the partner-facing position moved.
+-- Poll position; sync a fresh card only when the position moved. PollCoords has
+-- already verified real movement (≥0.1), so FORCE the send — an unforced QueueCard
+-- re-gates on CardSignature, whose integer-floored cx/cy silently ate sub-1% moves
+-- and made partner coordinates crawl in whole-point jumps. CARD_MIN_INTERVAL still
+-- applies, so this is at most one card per poll tick while moving.
 C_Timer.NewTicker(3, function()
   if ns:InCombat() then return end
   if not (ns.Pairing and ns.Pairing.PartnerName()) then return end
   if SelfState.PollCoords() and ns.Comm and ns.Comm.QueueCard then
-    ns.Comm.QueueCard(false)
+    ns.Comm.QueueCard(true)
   end
 end)
 

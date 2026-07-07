@@ -1,5 +1,8 @@
 package-as: BetterTogether
 
+required-dependencies:
+  - peaversconsumablesdata
+
 ignore:
   - .git
   - .github
