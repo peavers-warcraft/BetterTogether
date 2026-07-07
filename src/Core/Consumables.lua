@@ -222,7 +222,7 @@ local function forEachSpecID(classID, fn)
   -- bare global. Check both homes for each so the import survives either migrating.
   local getNum  = (C_SpecializationInfo and C_SpecializationInfo.GetNumSpecializationsForClassID)
       or GetNumSpecializationsForClassID
-  local getInfo = (C_SpecializationInfo and C_SpecializationInfo.GetSpecializationInfoForClassID)
+  local getInfo = (C_SpecializationInfo and rawget(C_SpecializationInfo, "GetSpecializationInfoForClassID"))
       or GetSpecializationInfoForClassID
   if not (getNum and getInfo) then return end
   for i = 1, getNum(classID) or 0 do
