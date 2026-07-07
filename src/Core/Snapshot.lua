@@ -116,12 +116,38 @@ end
 -- The ENCHANT_SLOTS order defines the bit positions in the `ench` bitmask, so
 -- both ends MUST agree — keeping it here guarantees that.
 -- ---------------------------------------------------------------------------
-Snapshot.ENCHANT_SLOTS = { 15, 5, 9, 7, 8, 11, 12, 16, 17 } -- back,chest,wrist,legs,feet,ring1,ring2,mh,oh
+-- Bit positions are wire ABI: never reorder or remove entries, only APPEND (an
+-- older client simply ignores bits beyond its own table, and the enchk mask
+-- tells the new Gear tab which slots the sender actually evaluated). Whether a
+-- slot is *currently* enchantable is decided at scan time (SelfState), not here.
+Snapshot.ENCHANT_SLOTS = { 15, 5, 9, 7, 8, 11, 12, 16, 17, 1, 3 } -- back,chest,wrist,legs,feet,ring1,ring2,mh,oh,head,shoulder
 Snapshot.SLOT_NAMES = {
-  [1]="Head", [3]="Shoulder", [5]="Chest", [7]="Legs", [8]="Feet", [9]="Wrist",
-  [10]="Hands", [15]="Cloak", [11]="Ring", [12]="Ring", [16]="Weapon", [17]="Off-hand",
-  [6]="Belt",
+  [1]="Head", [2]="Neck", [3]="Shoulder", [5]="Chest", [7]="Legs", [8]="Feet", [9]="Wrist",
+  [10]="Hands", [15]="Cloak", [11]="Ring", [12]="Ring", [13]="Trinket", [14]="Trinket",
+  [16]="Weapon", [17]="Off-hand", [6]="Belt",
 }
+
+-- Decode the CARD `gs` socket string into a slot-keyed table. Two entry forms
+-- (kept compact because CARD is one unchunked message): "slot:total" = all
+-- sockets filled, "slot:filled/total" = some empty. Returns {} for nil/empty
+-- or garbled input.
+--- @param gs string|nil
+--- @return table sockets Map of slot -> { filled=, total= }.
+function Snapshot.ParseSockets(gs)
+  local out = {}
+  if not gs or gs == "" then return out end
+  for part in gs:gmatch("[^,]+") do
+    local slot, filled, total = part:match("^(%d+):(%d+)/(%d+)$")
+    if not slot then
+      slot, total = part:match("^(%d+):(%d+)$")
+      filled = total
+    end
+    if slot then
+      out[tonumber(slot)] = { filled = tonumber(filled), total = tonumber(total) }
+    end
+  end
+  return out
+end
 
 -- ---------------------------------------------------------------------------
 -- CARD: the rich, slow-changing partner card (identity / location / M+ / gear).
@@ -147,7 +173,9 @@ function Snapshot.EncodeCard()
   add("vault",    "vault=" .. (s.vr or 0) .. "/" .. (s.vm or 0) .. "/" .. (s.vw or 0))
   add("location", "zone=" .. clean(s.zone, 24), "rest=" .. (s.rest and 1 or 0))
   add("gold",     "gold=" .. (s.gold or 0))
-  add("gear",     "ench=" .. (s.enchMask or 0), "gem=" .. (s.gemMiss or 0), "dslot=" .. (s.durSlot or 0), "dlow=" .. (s.durLowN or 0))
+  -- enchk (evaluated-slot mask) and gs (per-slot sockets "slot:filled/total,...")
+  -- feed the Gear tab's per-slot breakdown; older clients simply ignore them.
+  add("gear",     "ench=" .. (s.enchMask or 0), "enchk=" .. (s.enchCheck or 0), "gem=" .. (s.gemMiss or 0), "gs=" .. (s.gs or ""), "dslot=" .. (s.durSlot or 0), "dlow=" .. (s.durLowN or 0))
   add("supplies", "pots=" .. (s.pots or 0), "hs=" .. (s.hs or 0), "feast=" .. (s.foodCount or 0))
   add("coords",   "cx=" .. (s.cx or 0), "cy=" .. (s.cy or 0))
   return table.concat(parts, "|")
@@ -178,7 +206,11 @@ function Snapshot.DecodeCard(payload)
     rest    = kv.rest == "1",
     gold    = num("gold", 0),
     enchMask = num("ench", 0),
+    -- nil (not 0) when the partner runs an older build without the field, so the
+    -- Gear tab can fall back to "assume every slot was evaluated".
+    enchCheck = kv.enchk and tonumber(kv.enchk) or nil,
     gemMiss  = num("gem", 0),
+    gs       = kv.gs,   -- per-slot sockets; nil on older builds
     durSlot  = num("dslot", 0),
     durLowN  = num("dlow", 0),
     pots     = num("pots", 0),
@@ -285,6 +317,11 @@ function Snapshot.ComputeVerdict(snap, db)
   if shared("bags")  and (snap.bags or 0) <= 0 then fail("bags") end
   if shared("wpn")   and not snap.wpn  then fail("wpn") end
   if shared("rune")  and not snap.rune then fail("rune") end
+
+  -- Gear quality (enchMask/gemMiss ride in the CARD message under the "gear"
+  -- privacy key, merged into the same partner table as the SNAP fields).
+  if shared("gear") and (snap.enchMask or 0) > 0 then fail("enchants") end
+  if shared("gear") and (snap.gemMiss or 0) > 0 then fail("gems") end
 
   -- Quest mismatch: compare partner's broadcast quest with our super-tracked one.
   local myQuest = (C_SuperTrack and C_SuperTrack.GetSuperTrackedQuestID

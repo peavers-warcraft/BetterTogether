@@ -208,44 +208,181 @@ end
 -- ---------------------------------------------------------------------------
 -- Gear quality: missing enchants (bitmask) + best-effort empty-socket count
 -- ---------------------------------------------------------------------------
+-- Weapon-slot equip locations that accept a permanent weapon enchant. Shields,
+-- held-in-off-hand items, ranged weapons and wands take none on modern clients,
+-- so an empty enchant field there is NOT a missing enchant (false "missing"
+-- otherwise; if a future patch makes these enchantable we under-report, which is
+-- the safer direction for an advisory check).
+local ENCHANTABLE_WEAPON_LOC = {
+  INVTYPE_WEAPON = true, INVTYPE_2HWEAPON = true,
+  INVTYPE_WEAPONMAINHAND = true, INVTYPE_WEAPONOFFHAND = true,
+}
+
+-- Which inventory slots take a permanent enchant THIS expansion? Preferred
+-- source: PeaversConsumablesData (per-spec enchant guide data, ships updates with
+-- the game so we never chase patches here). Fallback when it isn't installed or
+-- has no data for the spec: a built-in Midnight 12.x set — head, shoulder, chest,
+-- legs, feet, rings, weapons; cloak and wrist enchants no longer exist.
+local FALLBACK_ENCHANTABLE = {
+  [1] = true, [3] = true, [5] = true, [7] = true, [8] = true,
+  [11] = true, [12] = true, [16] = true, [17] = true,
+}
+
+-- Guide slot text -> inventory slot(s). Matched as substrings of the lowercased
+-- slot label ("Helm"/"Helmet"/"Head", "Shoulders", "Boots", "Rings", ...).
+local SLOT_TEXT_TO_INV = {
+  helm = { 1 }, head = { 1 },
+  shoulder = { 3 },
+  chest = { 5 },
+  legs = { 7 },
+  boots = { 8 }, feet = { 8 },
+  wrist = { 9 }, bracer = { 9 },
+  ring = { 11, 12 },
+  cloak = { 15 }, back = { 15 },
+  weapon = { 16, 17 },
+}
+
+-- Cached per class:spec (readGear runs on every state event; the guide lookup
+-- only needs to happen again after a spec change).
+local enchantableCache, enchantableCacheKey
+
+local function enchantableSlots()
+  local classID = select(3, UnitClass("player"))
+  local specID = 0
+  local idx = GetSpecialization and GetSpecialization()
+  if idx then specID = (GetSpecializationInfo(idx)) or 0 end
+  local key = (classID or 0) .. ":" .. specID
+  if enchantableCacheKey == key and enchantableCache then return enchantableCache end
+
+  local set
+  local api = _G.PeaversConsumablesData and _G.PeaversConsumablesData.API
+  if api and api.GetConsumables and classID and specID ~= 0 then
+    local items = safe(function() return api.GetConsumables(classID, specID, "enchants") end, nil)
+    if type(items) == "table" and #items > 0 then
+      set = {}
+      for _, item in ipairs(items) do
+        local slotText = tostring(item.slot or ""):lower()
+        for word, invSlots in pairs(SLOT_TEXT_TO_INV) do
+          if slotText:find(word, 1, true) then
+            for _, invSlot in ipairs(invSlots) do set[invSlot] = true end
+          end
+        end
+      end
+    end
+  end
+  enchantableCache, enchantableCacheKey = set or FALLBACK_ENCHANTABLE, key
+  return enchantableCache
+end
+
+-- Does this equipped slot expect a permanent enchant? Gated first on the
+-- current-expansion enchantable set, then weapon slots additionally on the item
+-- being an enchantable weapon type.
+local function slotWantsEnchant(slot, link)
+  if not enchantableSlots()[slot] then return false end
+  if slot ~= (INVSLOT_MAINHAND or 16) and slot ~= (INVSLOT_OFFHAND or 17) then return true end
+  local getInstant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
+  if not getInstant then return true end
+  local equipLoc = safe(function() return select(4, getInstant(link)) end, nil)
+  return ENCHANTABLE_WEAPON_LOC[equipLoc or ""] == true
+end
+
+-- Permanent enchant id from an item link ("item:<id>:<enchant>:..."), or nil.
+local function linkEnchantID(link)
+  local id = link:match("item:%d+:(%d*)")
+  if not id or id == "" or id == "0" then return nil end
+  return id
+end
+
+-- Socket count (from item stats) and slotted-gem count (from the link's four gem
+-- fields) for one equipped item. Returns 0,0 when the item has no sockets.
+local function socketCounts(link)
+  local getStats = C_Item and C_Item.GetItemStats   -- bare GetItemStats global removed in 12.x
+  if not getStats then return 0, 0 end
+  local stats = safe(function() return getStats(link) end, nil)
+  if type(stats) ~= "table" then return 0, 0 end
+  local sockets = 0
+  for k, v in pairs(stats) do
+    if type(k) == "string" and k:find("EMPTY_SOCKET") then sockets = sockets + (v or 0) end
+  end
+  if sockets == 0 then return 0, 0 end
+  local gem1, gem2, gem3, gem4 = link:match("item:%d+:%d*:(%d*):(%d*):(%d*):(%d*)")
+  local slotted = 0
+  for _, g in ipairs({ gem1, gem2, gem3, gem4 }) do
+    if g and g ~= "" and g ~= "0" then slotted = slotted + 1 end
+  end
+  return sockets, slotted
+end
+
 local function readGear(s)
-  local mask = 0
+  -- enchMask: evaluated slots that lack an enchant. enchCheck: which slots were
+  -- evaluated at all (equipped + enchantable) — lets the Gear tab tell "missing"
+  -- apart from "empty slot / not enchantable" on the partner's side.
+  local mask, check = 0, 0
   for i, slot in ipairs(ns.Snapshot.ENCHANT_SLOTS) do
     local link = GetInventoryItemLink("player", slot)
-    if link then
-      local enchantID = link:match("item:%d+:(%d*)")
-      if not enchantID or enchantID == "" or enchantID == "0" then
+    if link and slotWantsEnchant(slot, link) then
+      check = check + 2 ^ (i - 1)
+      if not linkEnchantID(link) then
         mask = mask + 2 ^ (i - 1)   -- this enchantable slot is unenchanted
       end
     end
   end
-  s.enchMask = mask
+  s.enchMask, s.enchCheck = mask, check
 
   -- Empty sockets: sockets present (from item stats) minus gems slotted (link).
-  local missing = 0
-  local getStats = C_Item and C_Item.GetItemStats   -- bare GetItemStats global removed in 12.x
+  -- gs is the per-slot detail, slot ascending so the string — and thus the card
+  -- signature — is deterministic. CARD travels as ONE unchunked addon message, so
+  -- the encoding is kept compact: "slot:total" when every socket is filled (the
+  -- common case), "slot:filled/total" only when some are empty.
+  local missing, gsParts = 0, {}
   for slot = FIRST_SLOT, LAST_SLOT do
     local link = GetInventoryItemLink("player", slot)
-    if link and getStats then
-      local stats = safe(function() return getStats(link) end, nil)
-      if type(stats) == "table" then
-        local sockets = 0
-        for k, v in pairs(stats) do
-          if type(k) == "string" and k:find("EMPTY_SOCKET") then sockets = sockets + (v or 0) end
-        end
-        if sockets > 0 then
-          -- count slotted gems in the link's gem fields
-          local _, gem1, gem2, gem3, gem4 = link:match("item:%d+:%d*:(%d*):(%d*):(%d*):(%d*)")
-          local slotted = 0
-          for _, g in ipairs({ gem1, gem2, gem3, gem4 }) do
-            if g and g ~= "" and g ~= "0" then slotted = slotted + 1 end
-          end
-          missing = missing + math.max(0, sockets - slotted)
-        end
+    if link then
+      local sockets, slotted = socketCounts(link)
+      if sockets > 0 then
+        missing = missing + math.max(0, sockets - slotted)
+        gsParts[#gsParts + 1] = slot .. ":" ..
+          (slotted >= sockets and sockets or (slotted .. "/" .. sockets))
       end
     end
   end
   s.gemMiss = missing
+  s.gs = table.concat(gsParts, ",")
+end
+
+-- Diagnostic (/bt gear): print the per-slot decisions behind enchMask/gemMiss so a
+-- wrong "missing" report can be pinned to a specific slot in-client.
+function SelfState.DumpGear()
+  local names = ns.Snapshot.SLOT_NAMES
+  ns:Print("gear scan (enchant slots):")
+  for _, slot in ipairs(ns.Snapshot.ENCHANT_SLOTS) do
+    local label = (names[slot] or ("slot " .. slot)) .. " (" .. slot .. ")"
+    local link = GetInventoryItemLink("player", slot)
+    if not link then
+      ns:Print("  " .. label .. ": |cff888888empty slot — skipped|r")
+    elseif not slotWantsEnchant(slot, link) then
+      ns:Print("  " .. label .. ": |cff888888not enchantable — skipped|r " .. link)
+    else
+      local id = linkEnchantID(link)
+      if id then ns:Print("  " .. label .. ": |cff44ff44enchant " .. id .. "|r " .. link)
+      else ns:Print("  " .. label .. ": |cffff5555NO ENCHANT -> counted missing|r " .. link) end
+    end
+  end
+  ns:Print("gear scan (sockets):")
+  local total = 0
+  for slot = FIRST_SLOT, LAST_SLOT do
+    local link = GetInventoryItemLink("player", slot)
+    if link then
+      local sockets, slotted = socketCounts(link)
+      if sockets > 0 then
+        local miss = math.max(0, sockets - slotted)
+        total = total + miss
+        local color = miss > 0 and "|cffff5555" or "|cff44ff44"
+        ns:Print("  " .. (names[slot] or ("slot " .. slot)) .. ": " .. color .. slotted .. "/" .. sockets .. " gems|r " .. link)
+      end
+    end
+  end
+  ns:Print("=> empty sockets counted: " .. total)
 end
 
 -- ---------------------------------------------------------------------------
@@ -302,7 +439,8 @@ function SelfState.CardSignature()
     s.cls or "", s.spec or 0, s.lvl or 0, s.ilvl or 0,
     s.key or "", s.klvl or 0, s.vr or 0, s.vm or 0, s.vw or 0,
     s.zone or "", s.rest and 1 or 0, s.gold or 0,
-    s.enchMask or 0, s.gemMiss or 0, s.pots or 0, s.hs or 0, s.foodCount or 0,
+    s.enchMask or 0, s.enchCheck or 0, s.gemMiss or 0, s.gs or "",
+    s.pots or 0, s.hs or 0, s.foodCount or 0,
     math.floor(s.cx or 0), math.floor(s.cy or 0),
   }, ":")
 end
@@ -357,6 +495,7 @@ ns:RegisterEvent("SUPER_TRACKING_CHANGED",      onStateEvent)
 ns:RegisterEvent("PLAYER_REGEN_ENABLED",        onStateEvent)
 -- CARD-relevant
 ns:RegisterEvent("PLAYER_LEVEL_UP",             onStateEvent)
+ns:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED", onStateEvent)  -- spec field + enchantable-slot set
 ns:RegisterEvent("ZONE_CHANGED_NEW_AREA",       onStateEvent)
 ns:RegisterEvent("ZONE_CHANGED",                onStateEvent)
 ns:RegisterEvent("PLAYER_UPDATE_RESTING",       onStateEvent)

@@ -67,7 +67,7 @@ local function build(host)
     f.headers[k] = Widgets.SectionHeader(f)
   end
   f.rows = {}
-  for _, k in ipairs({ "durability", "flask", "food", "wpn", "rune", "bags" }) do
+  for _, k in ipairs({ "durability", "flask", "food", "wpn", "rune", "bags", "enchants", "gems" }) do
     f.rows[k] = Row.Create(f, Theme.ICON[k])
   end
   f.nowRows = {}
@@ -124,7 +124,7 @@ local function refresh(f, ctx)
   Widgets.StyleHeader(f.headers.readiness, L["Readiness"], READY_W)
   S.setRowValues(f.rows, snap)
   local anchor, count = f.headers.readiness.diamond, 0
-  for _, key in ipairs({ "durability", "flask", "food", "wpn", "rune", "bags" }) do
+  for _, key in ipairs({ "durability", "flask", "food", "wpn", "rune", "bags", "enchants", "gems" }) do
     local row = f.rows[key]
     if ns.db.show[key] then
       row:SetShown(true); row:SetWidth(READY_W)

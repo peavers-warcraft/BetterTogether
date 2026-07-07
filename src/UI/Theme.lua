@@ -92,6 +92,8 @@ Theme.ICON = {
   wpn        = "Interface\\Icons\\INV_Stone_SharpeningStone_05",
   rune       = "Interface\\Icons\\INV_Misc_Rune_01",
   bags       = "Interface\\Icons\\INV_Misc_Bag_08",
+  enchants   = "Interface\\Icons\\Trade_Engraving",
+  gems       = "Interface\\Icons\\INV_Misc_Gem_Sapphire_02",
 }
 Theme.I_KEY    = "Interface\\Icons\\INV_Relics_Hourglass"
 Theme.I_VAULT  = "Interface\\Icons\\INV_Misc_Treasurechest_Battered"

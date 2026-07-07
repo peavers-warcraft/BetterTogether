@@ -223,6 +223,8 @@ local function build(host)
     { "wpn",        L["Weapon oil"] },
     { "rune",       L["Augment rune"] },
     { "bags",       L["Bag space"] },
+    { "enchants",   L["Enchants"] },
+    { "gems",       L["Gem sockets"] },
     { "quest",      L["Quest section"] },
   }
   for _, def in ipairs(rowDefs) do
@@ -245,6 +247,8 @@ local function build(host)
     { "bags",          L["Bags"] },
     { "wpn",           L["Weapon oil"] },
     { "rune",          L["Aug rune"] },
+    { "enchants",      L["Enchants"] },
+    { "gems",          L["Gem sockets"] },
     { "questMismatch", L["Quest mismatch"] },
   }
   for _, def in ipairs(sevDefs) do
