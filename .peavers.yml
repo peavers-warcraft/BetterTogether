@@ -3,7 +3,13 @@
 # Icon to display on website
 iconType: GroupNeedMoreIcon
 
+# CurseForge project ID for download statistics
+curseForgeProjectId: 1577596
+
 # Tags for filtering and categorization
 tags:
   - social
   - utility
+
+# Gallery images
+galleryImages: []
