@@ -11,6 +11,9 @@
 
 local addonName, ns = ...
 
+-- SavedVariables (declared in the .toc) are legitimate globals.
+-- luacheck: globals BetterTogetherDB BetterTogetherCharDB
+
 -- Global runtime state (spec §5). Kept global so /dump and the spec's naming work.
 BetterTogether = {
   self        = {},     -- own live readiness, recomputed on relevant events
