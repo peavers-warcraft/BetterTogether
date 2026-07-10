@@ -1,5 +1,12 @@
 # BetterTogether
 
+
+
+**Website:** [peavers.io](https://peavers.io) | **Addon Backup:** [vault.peavers.io](https://vault.peavers.io) | **Issues:** [GitHub](https://github.com/peavers-warcraft/BetterTogether/issues)
+
+<!-- peavers:custom -->
+# BetterTogether
+
 A World of Warcraft addon that gives duo players a live readiness dashboard for their partner — flask, food, repairs, and quests at a glance before every pull — plus a shared scrapbook of everything you've done together.
 
 **Website:** [peavers.io](https://peavers.io) | **Addon Backup:** [vault.peavers.io](https://vault.peavers.io) | **Issues:** [GitHub](https://github.com/peavers-warcraft/BetterTogether/issues)
@@ -51,3 +58,21 @@ Open settings with `/bt` to customize:
 ## Dependencies
 
 - [PeaversConsumablesData](https://www.curseforge.com/wow/addons/peaversconsumablesdata) (required)
+<!-- /peavers:custom -->
+
+## Installation
+
+### Recommended: PeaversUpdater
+
+Download and install [PeaversUpdater](https://github.com/peavers-warcraft/PeaversUpdater/releases/latest), the desktop updater for the whole Peavers collection. It installs BetterTogether together with its required dependencies and delivers updates about a week before they reach CurseForge.
+
+### Alternative: CurseForge
+
+1. Download from [CurseForge](https://www.curseforge.com/wow/addons/bettertogether)
+2. Ensure [PeaversCommons](https://www.curseforge.com/wow/addons/peaverscommons) is also installed
+3. Ensure [PeaversConfig](https://www.curseforge.com/wow/addons/peaversconfig) is also installed
+4. Enable the addon on the character selection screen
+
+---
+
+*Part of the [Peavers](https://peavers.io) addon collection · [Report an issue](https://github.com/peavers-warcraft/BetterTogether/issues) · [Support development on Patreon](https://www.patreon.com/Peavers)*
