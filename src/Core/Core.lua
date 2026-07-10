@@ -9,6 +9,7 @@
       modules register via ns:RegisterEvent(event, handler).
 ]]
 
+-- luacheck: globals BetterTogetherDB BetterTogetherCharDB
 local addonName, ns = ...
 
 -- SavedVariables (declared in the .toc) are legitimate globals.
