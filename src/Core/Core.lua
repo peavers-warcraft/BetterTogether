@@ -9,6 +9,7 @@
       modules register via ns:RegisterEvent(event, handler).
 ]]
 
+-- luacheck: globals BetterTogetherDB BetterTogetherCharDB
 local addonName, ns = ...
 
 -- Global runtime state (spec §5). Kept global so /dump and the spec's naming work.
