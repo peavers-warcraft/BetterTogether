@@ -18,7 +18,7 @@ echo -e "${GREEN}Deploying addon: ${YELLOW}$ADDON_NAME${NC}"
 WOW_PATHS=(
     "/Applications/World of Warcraft"
     "/Applications/World of Warcraft/_retail_"
-    "/Applications/World of Warcraft/beta"
+    "/Applications/World of Warcraft/_beta_"
     "/Applications/World of Warcraft/_classic_"
     "/Applications/Blizzard/World of Warcraft"
     "$HOME/Applications/World of Warcraft"
