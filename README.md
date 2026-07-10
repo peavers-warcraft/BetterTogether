@@ -1,6 +1,6 @@
 # BetterTogether
 
-
+A World of Warcraft addon that gives duo players a live readiness dashboard for their partner — flask, food, repairs, and quests at a glance before every pull — plus a shared scrapbook of everything you've done together.
 
 **Website:** [peavers.io](https://peavers.io) | **Addon Backup:** [vault.peavers.io](https://vault.peavers.io) | **Issues:** [GitHub](https://github.com/peavers-warcraft/BetterTogether/issues)
 
