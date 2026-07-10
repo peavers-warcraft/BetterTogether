@@ -2,8 +2,6 @@
 
 A World of Warcraft addon that gives duo players a live readiness dashboard for their partner — flask, food, repairs, and quests at a glance before every pull — plus a shared scrapbook of everything you've done together.
 
-**Website:** [peavers.io](https://peavers.io) | **Addon Backup:** [vault.peavers.io](https://vault.peavers.io) | **Issues:** [GitHub](https://github.com/peavers-warcraft/BetterTogether/issues)
-
 ## Features
 
 <!-- peavers:features -->
@@ -52,7 +50,7 @@ Open settings with `/bt` to customize:
 
 ### Recommended: PeaversUpdater
 
-Download and install [PeaversUpdater](https://github.com/peavers-warcraft/PeaversUpdater/releases/latest), the desktop updater for the whole Peavers collection. It installs BetterTogether together with its required dependencies and delivers updates about a week before they reach CurseForge.
+Download and install [PeaversUpdater](https://github.com/peavers-warcraft/PeaversUpdater/releases/latest), the desktop updater for the whole Peavers collection. It installs BetterTogether together with its required dependencies and delivers updates before they reach CurseForge.
 
 ### Alternative: CurseForge
 
