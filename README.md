@@ -5,12 +5,6 @@
 **Website:** [peavers.io](https://peavers.io) | **Addon Backup:** [vault.peavers.io](https://vault.peavers.io) | **Issues:** [GitHub](https://github.com/peavers-warcraft/BetterTogether/issues)
 
 <!-- peavers:custom -->
-# BetterTogether
-
-A World of Warcraft addon that gives duo players a live readiness dashboard for their partner — flask, food, repairs, and quests at a glance before every pull — plus a shared scrapbook of everything you've done together.
-
-**Website:** [peavers.io](https://peavers.io) | **Addon Backup:** [vault.peavers.io](https://vault.peavers.io) | **Issues:** [GitHub](https://github.com/peavers-warcraft/BetterTogether/issues)
-
 ## Features
 
 - Live partner readiness with a single green/amber/red verdict: repairs, flask, food, weapon oil, augment rune, and bag space
@@ -22,12 +16,6 @@ A World of Warcraft addon that gives duo players a live readiness dashboard for 
 - Partner roster with online status and one-click switching
 - Per-category privacy controls — anything unticked never leaves your client
 - Combat-safe by design: all checks happen out of combat, with batched addon messages
-
-## Installation
-
-1. Download from [CurseForge](https://www.curseforge.com/wow/addons/bettertogether) — both partners need it installed
-2. Ensure [PeaversConsumablesData](https://www.curseforge.com/wow/addons/peaversconsumablesdata) is also installed
-3. Enable the addon on the character selection screen
 
 ## Usage
 
@@ -54,10 +42,6 @@ Open settings with `/bt` to customize:
 - Which checks are blocking (red) vs. a heads-up (amber)
 - Which readiness rows are visible
 - Quest broadcast: share your super-tracked quest automatically, or pin one
-
-## Dependencies
-
-- [PeaversConsumablesData](https://www.curseforge.com/wow/addons/peaversconsumablesdata) (required)
 <!-- /peavers:custom -->
 
 ## Installation
