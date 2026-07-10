@@ -13,3 +13,7 @@ tags:
 
 # Gallery images
 galleryImages: []
+
+# Gallery images shown on the website
+galleryImages:
+  - /addons/BetterTogether/01.png
