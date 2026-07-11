@@ -46,6 +46,7 @@ Open settings with `/bt` to customize:
 - Quest broadcast: share your super-tracked quest automatically, or pin one
 <!-- /peavers:configuration -->
 
+
 ## Installation
 
 ### Recommended: PeaversUpdater
