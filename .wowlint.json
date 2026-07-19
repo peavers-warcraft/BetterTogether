@@ -1,0 +1,9 @@
+{
+  "_comment": "Frames whose global name is required. Everything else should be anonymous: naming a templated frame also creates a global per named child the template defines.",
+  "namedFrames": {
+    "BetterTogetherPanel": "registered in UISpecialFrames, which resolves the frame via _G[name] on ESC; also read back via _G[panel:GetName()..'TitleText'] in Shell/Header.lua",
+    "BetterTogetherScroll": "UIPanelScrollFrameTemplate resolves its $parentScrollBar child by global name",
+    "BetterTogetherSettingsScroll": "UIPanelScrollFrameTemplate resolves its $parentScrollBar child by global name",
+    "BetterTogetherMainTab": "PanelTemplates_SelectTab/TabResize fall back to _G[name..'Left'/'Text'] for tab chrome"
+  }
+}
